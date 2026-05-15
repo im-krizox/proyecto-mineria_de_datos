@@ -3,7 +3,7 @@
 **Materia:** Minería de Datos · **Grupo 2805**
 **Profesor:** M. en IA Oscar Daniel Acosta González
 **Fecha:** 12 de mayo de 2026 (rev. 2)
-**Auditoría sobre:** `INSTRUCCIONES.md`, los tres notebooks originales más los cuatro notebooks de mejora (`bugfix_categorias`, `Enriquecimiento_Exogeno`, `Clustering_Sellers`, `Series_Tiempo_Demanda`).
+**Auditoría sobre:** `INSTRUCCIONES.md`, los tres notebooks originales más los cuatro notebooks de mejora (`03_correccion_traduccion_categorias`, `04_enriquecimiento_calendario_brasil`, `06_clustering_sellers`, `07_series_tiempo_y_alertas`).
 
 ---
 
@@ -29,7 +29,7 @@ A continuación se documenta cada brecha en orden de criticidad, indicando si fu
 
 ## 1. Brechas frente al enunciado
 
-### 1.1 ✅ Fuente exógena — **RESUELTO** en `Enriquecimiento_Exogeno.ipynb`
+### 1.1 ✅ Fuente exógena — **RESUELTO** en `04_enriquecimiento_calendario_brasil.ipynb`
 
 > *“Como requisito **indispensable** para robustecer el análisis, el conjunto de datos principal deberá ser enriquecido con **al menos una fuente de información exógena**.”* — INSTRUCCIONES.md
 
@@ -49,11 +49,11 @@ A continuación se documenta cada brecha en orden de criticidad, indicando si fu
 | **Black Friday** | **16.92 %** | **2.58** |
 | **Cyber Monday** | **17.87 %** | **2.72** |
 
-**Outputs:** `dim_calendario.csv` (1,096 × 15) y `tad_pedidos_enriquecido.csv` (99,441 × 51).
+**Outputs:** `04_dim_calendario.csv` (1,096 × 15) y `04_tad_pedidos_enriquecido.csv` (99,441 × 51).
 
 > Sustituir el proxy crudo `mes` (importancia 0.33 en el árbol original) por estas banderas reales es lo que va a permitir que el modelo supervisado v2 supere a la versión 1.
 
-### 1.2 ✅ Modelado de series de tiempo — **RESUELTO** en `Series_Tiempo_Demanda.ipynb`
+### 1.2 ✅ Modelado de series de tiempo — **RESUELTO** en `07_series_tiempo_y_alertas.ipynb`
 
 > *“Modelado de Series de Tiempo: pronosticar la demanda futura a nivel de SKU y por sucursal.”* — INSTRUCCIONES.md
 
@@ -95,7 +95,7 @@ SARIMA gana 3 de 5 y empata en 2 (no degrada al baseline).
 
 Cada alerta incluye **mensaje accionable** con la magnitud sugerida del ajuste. Ejemplo: *“`computers_accessories` 2018-08-13 STOCKOUT — demanda esperada hasta 36 items vs P90 hist 24, reabastecer +159 % sobre el pedido base”*.
 
-### 1.4 ✅ Clustering de sellers — **RESUELTO** en `Clustering_Sellers.ipynb`
+### 1.4 ✅ Clustering de sellers — **RESUELTO** en `06_clustering_sellers.ipynb`
 
 > *“Aplicación de algoritmos de aprendizaje no supervisado para identificar y agrupar… que exhiban comportamientos de rotación similares. Esto permitirá generar **estrategias de reabastecimiento parametrizadas por clúster**.”*
 
@@ -171,9 +171,9 @@ El árbol ajustado por `GridSearchCV` (90 combinaciones) entrega **exactamente l
 
 Ya hay todo lo necesario para entrenar un modelo nuevo con **chance real de mejorar el F1**:
 
-1. **Dataset de entrenamiento ya enriquecido:** `tad_pedidos_enriquecido.csv` con las 7 banderas exógenas.
+1. **Dataset de entrenamiento ya enriquecido:** `04_tad_pedidos_enriquecido.csv` con las 7 banderas exógenas.
 2. **Variables del seller que no se usaron** (calculables ahora con los outputs de la rev. 2):
-   - Tasa histórica de retraso del seller (`seller_agg_clusters.csv` → `tasa_retraso`).
+   - Tasa histórica de retraso del seller (`06_seller_agg_clusters.csv` → `tasa_retraso`).
    - Etiqueta de cluster del seller (categórica de 3 valores).
    - Distancia geodésica seller↔cliente (con `geo_lat/geo_lng` ya disponibles en ambas tablas).
 3. **Probar Random Forest y/o Gradient Boosting** si están vistos en clase. Random Forest es interpretable vía importancias.
@@ -185,7 +185,7 @@ El equipo identifica explícitamente y excluye variables conocidas post-entrega 
 
 ---
 
-## 3. Bug de `product_category_name_english` — **RESUELTO** en `bugfix_categorias.ipynb`
+## 3. Bug de `product_category_name_english` — **RESUELTO** en `03_correccion_traduccion_categorias.ipynb`
 
 **Causa raíz confirmada:** la limpieza convirtió las categorías a Title Case (`Esporte Lazer`) y el ETL hizo merge contra el archivo de traducción que conserva `snake_case` (`esporte_lazer`). Resultado: 0 matches, 100 % de la columna en NaN.
 
@@ -193,7 +193,7 @@ El equipo identifica explícitamente y excluye variables conocidas post-entrega 
 - Diccionario canónico de **74 entradas** (los 71 oficiales + `casa_conforto_2`, `eletrodomesticos_2`, `sin_categoria`).
 - Conversión Title Case → snake_case en el momento del lookup.
 - Asserts de calidad: 0 nulos, 74 valores únicos, consistencia 1:1 PT↔EN.
-- `tad_ventas.csv` reescrito; backup en `tad_ventas_backup_pre_bugfix.csv`.
+- `02_tad_ventas.csv` reescrito; backup en `_backup/tad_ventas_backup_pre_bugfix.csv`.
 
 **Recomendación complementaria:** en una versión definitiva del ETL, mover la transformación cosmética del nombre a una columna nueva (`product_category_display`) y conservar el `snake_case` original como llave de join, para evitar que vuelva a ocurrir.
 
@@ -205,10 +205,10 @@ El equipo identifica explícitamente y excluye variables conocidas post-entrega 
 0.09 % de las filas de `fact_ventas` tienen un `pago_key` que no existe en `dim_pago`. Conviene auditar (`fact_ventas[fact_ventas["pago_key"].isna()]`) y agregar un valor *“sin pago”* en la dimensión.
 
 ### 4.2 Rutas hardcodeadas
-`limpieza_completa.ipynb` arranca con `DATA_PATH = 'C:/Users/artub/MINERIA/'`. Parametrizar con `os.getenv("DATA_PATH", "./data/")`.
+`01_limpieza_datos_olist.ipynb` arranca con `DATA_PATH = 'C:/Users/artub/MINERIA/'`. Parametrizar con `os.getenv("DATA_PATH", "./data/")`.
 
 ### 4.3 Mezcla de notebooks en uno solo
-`limpieza_completa.ipynb` contiene seis sub-notebooks concatenados. Funciona, pero pierde aislamiento de variables. Sugerencia: dividir o usar funciones puras `def limpiar_customers(df) -> pd.DataFrame:`.
+`01_limpieza_datos_olist.ipynb` contiene seis sub-notebooks concatenados. Funciona, pero pierde aislamiento de variables. Sugerencia: dividir o usar funciones puras `def limpiar_customers(df) -> pd.DataFrame:`.
 
 ### 4.4 Documentación generada al final del notebook de modelado
 Se exportan varios CSVs sueltos. Falta consolidarlos en un *artifact* único (PDF, HTML, o Looker Studio) para el entregable gerencial.

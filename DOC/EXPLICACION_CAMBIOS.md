@@ -10,10 +10,10 @@ Hicimos **5 cambios**. Cada uno tenía un problema concreto del enunciado del pr
 
 | # | Cambio | Archivo principal | Problema que resuelve |
 |---|---|---|---|
-| 1 | Bug fix de categorías | `bugfix_categorias.ipynb` | Una columna estaba 100 % vacía sin que nadie lo notara |
-| 2 | Enriquecimiento con feriados | `Enriquecimiento_Exogeno.ipynb` | El profesor pedía una fuente externa "indispensable" y no había ninguna |
-| 3 | Clustering de sellers | `Clustering_Sellers.ipynb` | Faltaba ejecutar la segmentación que el enunciado pedía |
-| 4 | Series de tiempo + alertas | `Series_Tiempo_Demanda.ipynb` | Faltaba pronosticar demanda y avisar de quiebres de stock |
+| 1 | Bug fix de categorías | `03_correccion_traduccion_categorias.ipynb` | Una columna estaba 100 % vacía sin que nadie lo notara |
+| 2 | Enriquecimiento con feriados | `04_enriquecimiento_calendario_brasil.ipynb` | El profesor pedía una fuente externa "indispensable" y no había ninguna |
+| 3 | Clustering de sellers | `06_clustering_sellers.ipynb` | Faltaba ejecutar la segmentación que el enunciado pedía |
+| 4 | Series de tiempo + alertas | `07_series_tiempo_y_alertas.ipynb` | Faltaba pronosticar demanda y avisar de quiebres de stock |
 | 5 | Actualización de docs | `DOCUMENTACION_PROYECTO.md` y `RETROALIMENTACION.md` | Reflejar todo lo anterior |
 
 A continuación cada uno con detalle.
@@ -35,11 +35,11 @@ Eso fue lo que pasó aquí:
 - Resultado: ninguna fila coincidió, la columna en inglés quedó toda vacía, pero el código no marcó ningún error.
 
 ### Qué hice
-1. **Respaldé** el archivo original (`tad_ventas_backup_pre_bugfix.csv`) por si algo salía mal.
+1. **Respaldé** el archivo original (`_backup/tad_ventas_backup_pre_bugfix.csv`) por si algo salía mal.
 2. Construí un **diccionario de 74 traducciones** PT → EN (los 71 oficiales de Olist + 3 que el dataset tenía de más).
 3. Antes de buscar en el diccionario, **convierto la categoría de "Esporte Lazer" de vuelta a "esporte_lazer"** para que coincidan las llaves.
 4. Apliqué el mapeo y verifiqué con asserts (líneas que rompen el código si algo está mal): 0 nulos, 74 valores únicos, cada categoría en portugués corresponde a una sola en inglés.
-5. Sobrescribí `tad_ventas.csv` con la columna corregida.
+5. Sobrescribí `02_tad_ventas.csv` con la columna corregida.
 
 ### Resultado
 | | Antes | Después |
@@ -81,7 +81,7 @@ Después generé varias **banderas** (columnas con 1 o 0) para cada día:
 - `dias_a_proximo_evento` (cuántos días faltan al siguiente evento)
 - `en_ventana_pre_evento_3d` (si estamos a 3 días o menos de un evento — aquí es cuando se acumulan los pedidos y la logística colapsa)
 
-Y finalmente uní este calendario a la tabla de pedidos (`tad_pedidos`), creando una nueva versión enriquecida (`tad_pedidos_enriquecido.csv`).
+Y finalmente uní este calendario a la tabla de pedidos (`tad_pedidos`), creando una nueva versión enriquecida (`04_tad_pedidos_enriquecido.csv`).
 
 ### Cómo validamos que sirve
 La pregunta clave: **¿estas banderas realmente ayudan a explicar los retrasos?** Si no marcan diferencia, son adorno. Resultado:
@@ -241,7 +241,7 @@ La documentación que habíamos hecho describía el proyecto **como estaba antes
 - En el resumen ejecutivo, ahora son 8 puntos de cobertura (antes 4).
 - La tabla de notebooks pasó de 3 a 7 notebooks, marcando los nuevos como "rev. 2 — Ejecutado ✓".
 - La sección de fuentes exógenas ya no dice "no se hizo nada"; ahora describe el calendario, las banderas y la tabla de tasas de retraso por evento.
-- El bug de categorías ya no está como "hallazgo crítico pendiente"; está como "**resuelto** en `bugfix_categorias.ipynb`".
+- El bug de categorías ya no está como "hallazgo crítico pendiente"; está como "**resuelto** en `03_correccion_traduccion_categorias.ipynb`".
 - Agregué tres secciones completas describiendo los nuevos notebooks: bugfix, clustering, series de tiempo.
 - La estructura de archivos del proyecto está reorganizada en bloques: notebooks rev. 1, notebooks rev. 2, datasets de entrada, datasets generados, documentación.
 - La tabla de "cobertura del enunciado" pasó de tener varios ❌/⚠️ a tener ✅ en lo que cubrimos. **El cumplimiento estimado pasó de ~50 % a ~75-80 %**.

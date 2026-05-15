@@ -23,13 +23,13 @@ El proyecto se entrega en siete notebooks y dos archivos de documentación.
 
 | Notebook | Propósito | Celdas / Estado |
 |---|---|---|
-| `limpieza_completa.ipynb` | Limpieza individual de las 9 tablas Olist | 84 |
-| `ETL_ProyectoMD.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 35 |
-| `Análisis Exploratorio para Modelado.ipynb` | EDA, modelado supervisado e hiperparametrización | 119 |
-| `bugfix_categorias.ipynb` | Re-poblar `product_category_name_english` (rev. 2) | Ejecutado ✓ |
-| `Enriquecimiento_Exogeno.ipynb` | Calendario BR + banderas exógenas (rev. 2) | Ejecutado ✓ |
-| `Clustering_Sellers.ipynb` | K-Means + perfilado + estrategias (rev. 2) | Ejecutado ✓ |
-| `Series_Tiempo_Demanda.ipynb` | SARIMA + sistema de alertas (rev. 2) | Ejecutado ✓ |
+| `01_limpieza_datos_olist.ipynb` | Limpieza individual de las 9 tablas Olist | 84 |
+| `02_etl_data_warehouse.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 35 |
+| `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado e hiperparametrización | 119 |
+| `03_correccion_traduccion_categorias.ipynb` | Re-poblar `product_category_name_english` (rev. 2) | Ejecutado ✓ |
+| `04_enriquecimiento_calendario_brasil.ipynb` | Calendario BR + banderas exógenas (rev. 2) | Ejecutado ✓ |
+| `06_clustering_sellers.ipynb` | K-Means + perfilado + estrategias (rev. 2) | Ejecutado ✓ |
+| `07_series_tiempo_y_alertas.ipynb` | SARIMA + sistema de alertas (rev. 2) | Ejecutado ✓ |
 
 ---
 
@@ -76,7 +76,7 @@ Eventos catalogados:
 
 ---
 
-## 3. Capa 1 — Limpieza (`limpieza_completa.ipynb`)
+## 3. Capa 1 — Limpieza (`01_limpieza_datos_olist.ipynb`)
 
 El notebook está organizado por sub-notebooks lógicos, uno por tabla. Resumen de las decisiones por archivo:
 
@@ -128,7 +128,7 @@ El notebook está organizado por sub-notebooks lógicos, uno por tabla. Resumen 
 
 ---
 
-## 4. Capa 2 — Data Warehouse y ETL (`ETL_ProyectoMD.ipynb`)
+## 4. Capa 2 — Data Warehouse y ETL (`02_etl_data_warehouse.ipynb`)
 
 ### 4.1 Modelo dimensional (esquema estrella)
 
@@ -182,7 +182,7 @@ Las dos sábanas se suben con `bigquery.LoadJobConfig(write_disposition="WRITE_T
 
 ---
 
-## 5. Capa 3 — EDA y modelado (`Análisis Exploratorio para Modelado.ipynb`)
+## 5. Capa 3 — EDA y modelado (`05_analisis_exploratorio_modelado.ipynb`)
 
 ### 5.1 Estructura, tipos y granularidad
 Se confirma:
@@ -190,7 +190,7 @@ Se confirma:
 - `tad_ventas`: 112,650 filas, granularidad por ítem. ✓
 
 ### 5.2 Hallazgo crítico de calidad — **resuelto en rev. 2**
-La columna **`product_category_name_english` en `tad_ventas` estaba 100 % nula** porque el merge se hacía contra los nombres ya transformados a Title Case (`Esporte Lazer`) mientras la tabla de traducción conserva `snake_case` (`esporte_lazer`). Solucionado en `bugfix_categorias.ipynb` (§ 6 de este documento) usando un diccionario canónico de 74 entradas. Cobertura post-fix: 100 % (0 nulos, 74 valores únicos).
+La columna **`product_category_name_english` en `tad_ventas` estaba 100 % nula** porque el merge se hacía contra los nombres ya transformados a Title Case (`Esporte Lazer`) mientras la tabla de traducción conserva `snake_case` (`esporte_lazer`). Solucionado en `03_correccion_traduccion_categorias.ipynb` (§ 6 de este documento) usando un diccionario canónico de 74 entradas. Cobertura post-fix: 100 % (0 nulos, 74 valores únicos).
 
 ### 5.3 Variable objetivo
 
@@ -251,17 +251,17 @@ Pipeline con `ColumnTransformer` (imputación + OneHot + opcional escalado), div
 El modelo se apoya casi totalmente en la **estacionalidad** (`mes`, `trimestre`) y **geografía del cliente**, mientras que `payment_installments`, `num_items` o `dia_semana_num` no aportan información discriminativa.
 
 ### 5.8 Clustering de sellers (preliminar)
-Se construye `seller_agg` y se hace EDA de distribuciones / atípicos. La ejecución completa de K-Means (con selección de k, perfilado y estrategias) se entrega en el notebook **`Clustering_Sellers.ipynb`** descrito en § 7.
+Se construye `seller_agg` y se hace EDA de distribuciones / atípicos. La ejecución completa de K-Means (con selección de k, perfilado y estrategias) se entrega en el notebook **`06_clustering_sellers.ipynb`** descrito en § 7.
 
 ---
 
-## 6. Capa 4 — Bug fix de traducción de categorías (`bugfix_categorias.ipynb`)
+## 6. Capa 4 — Bug fix de traducción de categorías (`03_correccion_traduccion_categorias.ipynb`)
 
 ### 6.1 Diagnóstico
 El merge `products.merge(category_translation, on="product_category_name", how="left")` del ETL original fallaba silenciosamente porque la limpieza previa había convertido las categorías a Title Case (`Esporte Lazer`) mientras el archivo de traducción conserva el formato original `snake_case` (`esporte_lazer`). El resultado: 112,650 filas con `product_category_name_english` en `NaN` (100 %).
 
 ### 6.2 Solución
-1. Backup del archivo original en `tad_ventas_backup_pre_bugfix.csv`.
+1. Backup del archivo original en `_backup/tad_ventas_backup_pre_bugfix.csv`.
 2. Diccionario canónico de **74 entradas** (los 71 oficiales de Olist + `casa_conforto_2` y `eletrodomesticos_2` presentes en el dataset + `sin_categoria` añadido por el equipo en limpieza).
 3. Conversión Title Case → snake_case y mapeo directo.
 4. Asserts de calidad: número de filas, no nulos, consistencia 1:1 PT↔EN.
@@ -270,11 +270,11 @@ El merge `products.merge(category_translation, on="product_category_name", how="
 - 0 categorías sin match.
 - 74 traducciones únicas distribuidas correctamente.
 - Top 5: `bed_bath_table` (11,115), `health_beauty` (9,670), `sports_leisure` (8,641), `furniture_decor` (8,334), `computers_accessories` (7,827).
-- `tad_ventas.csv` reescrito con la columna corregida; estructura de columnas inalterada (sigue siendo 55 columnas).
+- `02_tad_ventas.csv` reescrito con la columna corregida; estructura de columnas inalterada (sigue siendo 55 columnas).
 
 ---
 
-## 7. Capa 5 — Segmentación de Sellers (`Clustering_Sellers.ipynb`)
+## 7. Capa 5 — Segmentación de Sellers (`06_clustering_sellers.ipynb`)
 
 ### 7.1 Tabla agregada `seller_agg`
 3,095 filas, una por seller, con 13 variables agrupadas en cinco dimensiones:
@@ -316,12 +316,12 @@ Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, 
 | Cola larga inestable | Cero buffer, producción bajo pedido. Plan de mejora de calidad o salida del catálogo si retraso/mala-review no mejora en 60 días. |
 
 ### 7.6 Outputs
-- `seller_agg_clusters.csv` — 3,095 sellers con etiqueta y estrategia (cargable a BigQuery como `dim_cluster_seller`).
-- `perfil_clusters.csv` — vista resumen para la presentación gerencial.
+- `06_seller_agg_clusters.csv` — 3,095 sellers con etiqueta y estrategia (cargable a BigQuery como `dim_cluster_seller`).
+- `06_perfil_clusters.csv` — vista resumen para la presentación gerencial.
 
 ---
 
-## 8. Capa 6 — Series de Tiempo y Alertas (`Series_Tiempo_Demanda.ipynb`)
+## 8. Capa 6 — Series de Tiempo y Alertas (`07_series_tiempo_y_alertas.ipynb`)
 
 ### 8.1 Diseño
 - **Unidad muestral:** demanda diaria en items vendidos por `product_category_name_english`. (Olist no tiene tiendas físicas → categoría es la mayor granularidad estable.)
@@ -365,9 +365,9 @@ Convierte el pronóstico a **señales accionables** para los planeadores de inve
 Ejemplos accionables: *“`computers_accessories` 2018-08-13 — STOCKOUT, demanda esperada hasta 36 items vs P90 histórico 24, reabastecer +159 % sobre el pedido base”*; *“`health_beauty` 2018-08-04 — SOBRE-STOCK, demanda baja hasta 5 items vs P10=13, considerar promoción”*.
 
 ### 8.5 Outputs
-- `series_demanda_diaria.csv` — panel diario por categoría (insumo de dashboard).
-- `alertas_inventario.csv` — alertas accionables clasificadas por color.
-- `metricas_series_tiempo.csv` — comparación SARIMA vs naïve.
+- `07_series_demanda_diaria.csv` — panel diario por categoría (insumo de dashboard).
+- `07_alertas_inventario.csv` — alertas accionables clasificadas por color.
+- `07_metricas_series_tiempo.csv` — comparación SARIMA vs naïve.
 
 ---
 
@@ -390,15 +390,15 @@ Scripts UNAM/
 ├── RETROALIMENTACION.md                      # Auditoría y plan de cierre
 │
 ├── Notebooks principales (rev. 1)
-│   ├── limpieza_completa.ipynb
-│   ├── ETL_ProyectoMD.ipynb
-│   └── Análisis Exploratorio para Modelado.ipynb
+│   ├── 01_limpieza_datos_olist.ipynb
+│   ├── 02_etl_data_warehouse.ipynb
+│   └── 05_analisis_exploratorio_modelado.ipynb
 │
 ├── Notebooks de mejora (rev. 2)
-│   ├── bugfix_categorias.ipynb              # Fix product_category_name_english
-│   ├── Enriquecimiento_Exogeno.ipynb        # Calendario BR como fuente exógena
-│   ├── Clustering_Sellers.ipynb             # K-Means + estrategias por cluster
-│   └── Series_Tiempo_Demanda.ipynb          # SARIMA + alertas
+│   ├── 03_correccion_traduccion_categorias.ipynb              # Fix product_category_name_english
+│   ├── 04_enriquecimiento_calendario_brasil.ipynb        # Calendario BR como fuente exógena
+│   ├── 06_clustering_sellers.ipynb             # K-Means + estrategias por cluster
+│   └── 07_series_tiempo_y_alertas.ipynb          # SARIMA + alertas
 │
 ├── Datasets de entrada
 │   ├── tad_pedidos.csv                       # Sábana original (37 MB)
@@ -426,17 +426,17 @@ Scripts UNAM/
 | Requerimiento de `INSTRUCCIONES.md` | Estado | Evidencia |
 |---|:---:|---|
 | Identificación / extracción / consolidación de dataset retail | ✅ | Olist, 9 tablas integradas |
-| **Enriquecimiento con al menos una fuente exógena** | ✅ | `Enriquecimiento_Exogeno.ipynb` — calendario BR (feriados + Carnaval + retail) |
-| **Modelado de series de tiempo** para pronóstico de demanda | ✅ | `Series_Tiempo_Demanda.ipynb` — SARIMA(1,1,1)(1,1,1,7) en 5 categorías |
-| **Sistema de alertas tempranas** de stockout / sobre-stock | ✅ | `Series_Tiempo_Demanda.ipynb` — bandas P10/P90 + IC 90 % |
-| **Segmentación / clustering** | ✅ | `Clustering_Sellers.ipynb` — K-Means k=3 + estrategias por cluster |
+| **Enriquecimiento con al menos una fuente exógena** | ✅ | `04_enriquecimiento_calendario_brasil.ipynb` — calendario BR (feriados + Carnaval + retail) |
+| **Modelado de series de tiempo** para pronóstico de demanda | ✅ | `07_series_tiempo_y_alertas.ipynb` — SARIMA(1,1,1)(1,1,1,7) en 5 categorías |
+| **Sistema de alertas tempranas** de stockout / sobre-stock | ✅ | `07_series_tiempo_y_alertas.ipynb` — bandas P10/P90 + IC 90 % |
+| **Segmentación / clustering** | ✅ | `06_clustering_sellers.ipynb` — K-Means k=3 + estrategias por cluster |
 | Ingeniería de features y limpieza exhaustiva | ✅ | Notebook de limpieza + bugfix de traducción |
 | Calidad de datos | ✅ | Bug `product_category_name_english` resuelto en rev. 2 |
 | Construcción de Data Warehouse | ✅ | Esquema estrella documentado y validado |
 | Estructuración OLTP | ⚠️ | No hay diagrama OLTP en notebooks (verificar `Documentación.docx`) |
 | Diagrama de Data Warehouse | ⚠️ | Implícito en código; falta visualización (draw.io / dbdiagram.io) |
 | Dashboard de BI | ❓ | Looker Studio referenciado, falta entregar capturas |
-| ETL | ✅ | `ETL_ProyectoMD.ipynb` |
+| ETL | ✅ | `02_etl_data_warehouse.ipynb` |
 | Arquitecturas de modelos y métricas | ✅ | Supervisado + clustering + SARIMA, todas con métricas reportadas |
 | **Interfaz web** | ❌ | Pendiente (entregable propuesto Streamlit) |
 | **Agente conversacional** | ❌ | Pendiente |
