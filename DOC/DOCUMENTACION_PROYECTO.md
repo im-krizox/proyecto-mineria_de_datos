@@ -2,7 +2,7 @@
 
 **Materia:** Minería de Datos · **Grupo 2805**
 **Profesor:** M. en IA Oscar Daniel Acosta González
-**Fecha de la versión:** 12 de mayo de 2026 (rev. 2 — incluye notebooks de mejora)
+**Fecha de la versión:** 15 de mayo de 2026 (rev. 3 — refactor de cierre: renames con prefijo `NN_`, split del ETL, preámbulo unificado del EDA, integridad `pago_key` a 100%, paths via env)
 
 ---
 
@@ -24,8 +24,8 @@ El proyecto se entrega en siete notebooks y dos archivos de documentación.
 | Notebook | Propósito | Celdas / Estado |
 |---|---|---|
 | `01_limpieza_datos_olist.ipynb` | Limpieza individual de las 9 tablas Olist | 84 |
-| `02_etl_data_warehouse.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 35 |
-| `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado e hiperparametrización | 119 |
+| `02_etl_data_warehouse.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 54 |
+| `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado e hiperparametrización | 114 |
 | `03_correccion_traduccion_categorias.ipynb` | Re-poblar `product_category_name_english` (rev. 2) | Ejecutado ✓ |
 | `04_enriquecimiento_calendario_brasil.ipynb` | Calendario BR + banderas exógenas (rev. 2) | Ejecutado ✓ |
 | `06_clustering_sellers.ipynb` | K-Means + perfilado + estrategias (rev. 2) | Ejecutado ✓ |
@@ -167,7 +167,7 @@ El notebook ejecuta una **batería de validación** sólida:
 | Integridad `product_id` → `dim_producto` | 100% |
 | Integridad `seller_id` → `dim_vendedor` | 100% |
 | Integridad `fecha_key` → `dim_tiempo` | 100% |
-| Integridad `pago_key` → `dim_pago` | 99.91% (ver § Hallazgos) |
+| Integridad `pago_key` → `dim_pago` | 100% (sentinela `SIN_PAGO`, pago_key=0, cubre pedidos sin registro de pago) |
 | Suma de `price` items vs fact_ventas | $13,591,643.70 = $13,591,643.70 ✓ |
 | Suma de `freight_value` items vs fact_ventas | $2,251,909.54 = $2,251,909.54 ✓ |
 | Suma de `payment_value` (sólo pedidos con items) | $15,846,280.17 = $15,846,280.17 ✓ |
@@ -178,7 +178,7 @@ Las dos sábanas se suben con `bigquery.LoadJobConfig(write_disposition="WRITE_T
 - `mineria-datos-493000.smart_supply_chain.tad_pedidos` — 99,441 filas × 42 columnas
 - `mineria-datos-493000.smart_supply_chain.tad_ventas` — 112,650 filas × 55 columnas
 
-> Las credenciales se leen de `smart_supply_chain.json` (no incluido en el repo, solo subido vía `files.upload()` en Colab).
+> Las credenciales se leen de `smart_supply_chain.json` (no incluido en el repo). Ruta configurable vía la variable de entorno `SSC_CREDENTIALS`; default = `smart_supply_chain.json` en CWD. Auth contra GCP via Application Default Credentials (`gcloud auth application-default login` o `GOOGLE_APPLICATION_CREDENTIALS`).
 
 ---
 

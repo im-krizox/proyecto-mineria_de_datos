@@ -2,7 +2,7 @@
 
 **Materia:** Minería de Datos · **Grupo 2805**
 **Profesor:** M. en IA Oscar Daniel Acosta González
-**Fecha:** 12 de mayo de 2026 (rev. 2)
+**Fecha:** 15 de mayo de 2026 (rev. 3 — incluye refactor de cierre)
 **Auditoría sobre:** `INSTRUCCIONES.md`, los tres notebooks originales más los cuatro notebooks de mejora (`03_correccion_traduccion_categorias`, `04_enriquecimiento_calendario_brasil`, `06_clustering_sellers`, `07_series_tiempo_y_alertas`).
 
 ---
@@ -165,7 +165,7 @@ Esfuerzo estimado: 1-2 horas.
 **Lectura honesta:** el árbol detecta 60 % de los pedidos que sí van a llegar tarde, pero por cada 100 alertas que emite **sólo 15 son correctas**. Para un sistema operacional, esto generaría 85 % de falsos positivos, lo cual es operativamente costoso.
 
 ### 2.2 La hiperparametrización **no mejoró nada** (rev. 1)
-El árbol ajustado por `GridSearchCV` (90 combinaciones) entrega **exactamente las mismas métricas** que el árbol inicial: F1 = 0.2349 vs 0.2349, ROC-AUC = 0.7202 vs 0.7201. Esto sugiere que el espacio de búsqueda y/o el set de variables limita el techo del modelo.
+El árbol ajustado por `GridSearchCV` (90 combinaciones) entrega **exactamente las mismas métricas** que el árbol inicial: F1 = 0.2411 vs 0.2411 (CV), 0.23 vs 0.23 (test). Esto sugiere que el espacio de búsqueda y/o el set de variables limita el techo del modelo.
 
 ### 2.3 Plan para un modelo supervisado v2 (recomendado para rev. 3)
 
@@ -201,17 +201,21 @@ El equipo identifica explícitamente y excluye variables conocidas post-entrega 
 
 ## 4. Hallazgos menores
 
-### 4.1 Integridad referencial 99.91 % en `pago_key`
-0.09 % de las filas de `fact_ventas` tienen un `pago_key` que no existe en `dim_pago`. Conviene auditar (`fact_ventas[fact_ventas["pago_key"].isna()]`) y agregar un valor *“sin pago”* en la dimensión.
+### 4.1 ✅ Integridad referencial `pago_key` — **RESUELTO**
+Se añadió una fila sentinela `SIN_PAGO` (`pago_key=0`, `payment_type='sin_pago'`, `payment_installments=0`) a `dim_pago` y un `fillna(0)` post-merge en `base` que mapea los pedidos sin registro de pago a esa sentinela. La integridad referencial pasa de **99.91% → 100%** al re-ejecutar el ETL.
 
-### 4.2 Rutas hardcodeadas
-`01_limpieza_datos_olist.ipynb` arranca con `DATA_PATH = 'C:/Users/artub/MINERIA/'`. Parametrizar con `os.getenv("DATA_PATH", "./data/")`.
+### 4.2 ✅ Rutas hardcodeadas — **RESUELTO**
+Todos los notebooks leen desde rutas relativas configurables vía variables de entorno:
+- `DATA_PATH` / `OUTPUT_PATH` en limpieza (default `../CSV/`).
+- `CSV_DIR` en el resto (default `../CSV`).
+- `SSC_CREDENTIALS` para el JSON de BigQuery (default `smart_supply_chain.json` en CWD).
+Auth a GCP via Application Default Credentials.
 
-### 4.3 Mezcla de notebooks en uno solo
-`01_limpieza_datos_olist.ipynb` contiene seis sub-notebooks concatenados. Funciona, pero pierde aislamiento de variables. Sugerencia: dividir o usar funciones puras `def limpiar_customers(df) -> pd.DataFrame:`.
+### 4.3 ⚠️ Mezcla de notebooks en uno solo — **PARCIAL**
+`01_limpieza_datos_olist.ipynb` sigue siendo seis sub-notebooks concatenados (84 celdas). No se refactorizó porque no es re-ejecutable en local sin recuperar los CSV crudos de Olist. `02_etl_data_warehouse.ipynb` sí se refactorizó: la antigua celda monolítica de ~566 líneas se partió en 10 sub-celdas con encabezados de sección (`### 1. Imports y carga` … `### 10. Exportación`).
 
 ### 4.4 Documentación generada al final del notebook de modelado
-Se exportan varios CSVs sueltos. Falta consolidarlos en un *artifact* único (PDF, HTML, o Looker Studio) para el entregable gerencial.
+Todos los outputs de la etapa 05 ahora se persisten en `CSV/` con el prefijo `05_` (`05_resultados_modelos_final.csv`, `05_importancias_arbol_ajustado.csv`, etc.) para mantener la organización por etapa. Falta consolidarlos en un *artifact* único (PDF, HTML, o Looker Studio) para el entregable gerencial.
 
 ---
 
