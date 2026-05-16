@@ -29,29 +29,30 @@ def render():
 
     # ---- Bandeja superior con métricas del modelo --------------------
     st.markdown(T.kpi_grid(
-        T.kpi_card("F1 (clase tarde)",  f'{metrics["f1_1"]:.3f}',
-                    delta=f'v1: 0.230 → +{(metrics["f1_1"]-0.23)/0.23*100:.0f}%',
+        T.kpi_card("Calidad general del modelo",  f'{metrics["f1_1"]:.3f}',
+                    delta=f'Versión anterior: 0.230 → +{(metrics["f1_1"]-0.23)/0.23*100:.0f}%',
                     delta_dir="up"),
-        T.kpi_card("Precision₁", f'{metrics["precision_1"]:.3f}',
-                    delta="vs 0.150 (v1)", delta_dir="up"),
-        T.kpi_card("Recall₁", f'{metrics["recall_1"]:.3f}',
-                    delta="vs 0.600 (v1)", delta_dir="down"),
-        T.kpi_card("ROC-AUC", f'{metrics["roc_auc"]:.3f}',
-                    delta="vs 0.720 (v1)", delta_dir="up"),
-        T.kpi_card("PR-AUC", f'{metrics["pr_auc"]:.3f}',
-                    delta="vs 0.170 (v1)", delta_dir="up"),
+        T.kpi_card("Aciertos cuando avisa retraso", f'{metrics["precision_1"]:.3f}',
+                    delta="antes: 0.150", delta_dir="up"),
+        T.kpi_card("Retrasos que sí detecta", f'{metrics["recall_1"]:.3f}',
+                    delta="antes: 0.600", delta_dir="down"),
+        T.kpi_card("Capacidad de distinguir riesgo", f'{metrics["roc_auc"]:.3f}',
+                    delta="antes: 0.720", delta_dir="up"),
+        T.kpi_card("Precisión en casos difíciles", f'{metrics["pr_auc"]:.3f}',
+                    delta="antes: 0.170", delta_dir="up"),
     ), unsafe_allow_html=True)
 
     st.markdown(T.callout(
-        "<strong>Random Forest tuneado v2</strong> — calculadora de probabilidad "
-        "de retraso para un pedido hipotético. La línea de referencia gris en el "
-        "gauge indica la tasa base global ({:.2%}).".format(base_rate)
+        "<strong>Calculadora de riesgo de retraso</strong> — simula un pedido "
+        "y el sistema estima qué tan probable es que llegue tarde. "
+        "La línea gris del medidor marca el promedio del negocio "
+        "({:.2%}); arriba de esa línea, el pedido es más riesgoso que lo normal.".format(base_rate)
     ), unsafe_allow_html=True)
 
     # ---- Formulario y resultado --------------------------------------
-    st.markdown(T.section("Calculadora de retraso por pedido",
-                           badge="Modelo v2",
-                           meta="Random Forest · GridSearchCV"),
+    st.markdown(T.section("Calcula el riesgo de retraso de un pedido",
+                           badge="Versión 2",
+                           meta="modelo afinado automáticamente"),
                  unsafe_allow_html=True)
 
     form_col, result_col = st.columns([1.3, 1])
@@ -72,11 +73,11 @@ def render():
                        if "credit_card" in cat_vals["payment_type"] else 0,
             )
             tipo_evento_compra = st.selectbox(
-                "Tipo de evento de la compra",
+                "Tipo de día de la compra",
                 options=cat_vals["tipo_evento_compra"],
             )
             seller_cluster_label = st.selectbox(
-                "Cluster del seller",
+                "Tipo de vendedor",
                 options=["Power-seller confiable", "Mediano regional",
                          "Cola larga inestable"],
             )
@@ -86,23 +87,23 @@ def render():
                                     min_value=dt.date(2016, 1, 1),
                                     max_value=dt.date(2018, 12, 31))
             delivery_days_estimated = st.slider(
-                "Días estimados de entrega", 3, 60, 14, 1)
-            num_items = st.slider("# Items en el pedido", 1, 12, 1, 1)
-            payment_installments = st.slider("Cuotas (installments)", 0, 24, 1, 1)
-            payment_value = st.number_input("Valor del pago (R$)",
+                "Días prometidos de entrega", 3, 60, 14, 1)
+            num_items = st.slider("Cuántos productos lleva el pedido", 1, 12, 1, 1)
+            payment_installments = st.slider("Mensualidades del pago", 0, 24, 1, 1)
+            payment_value = st.number_input("Monto del pago (R$)",
                                               min_value=10.0, value=120.0, step=5.0)
 
         c3, c4 = st.columns(2)
         with c3:
             seller_state = st.selectbox(
-                "Estado del seller",
+                "Estado del vendedor",
                 options=sorted(coords_sel["seller_state"].dropna().unique().tolist()),
                 index=0,
             )
         with c4:
             es_feriado = st.checkbox("Día feriado nacional", False)
             es_carnaval = st.checkbox("Día de Carnaval", False)
-            es_evento_retail = st.checkbox("Día de evento retail (BF, CM, ...)", False)
+            es_evento_retail = st.checkbox("Día de oferta especial (Black Friday, Cyber Monday...)", False)
 
     # ---- Derivar features ---------------------------------------------
     cli = coords_cli.set_index("customer_state").loc[customer_state]
@@ -162,17 +163,17 @@ def render():
         kchip = "ok" if kind == "low" else "warn" if kind == "medium" else "alert"
         block = T.compact(
             f'<div class="dial" style="text-align:left;">'
-            f'<div class="label">Lectura ejecutiva</div>'
+            f'<div class="label">Resumen para el negocio</div>'
             f'<div style="display:flex; align-items:center; gap:10px;">'
             f'{T.chip(label, kchip)}'
             f'<span style="font-family:\'JetBrains Mono\'; color:{T.TEXT_DIM};">'
-            f'multiplicador vs media = '
+            f'comparado con el promedio = '
             f'<strong style="color:{T.TEXT};">{multiplier:.2f}×</strong>'
             f'</span>'
             f'</div>'
-            f'<div class="desc">Distancia estimada seller↔cliente: '
+            f'<div class="desc">Distancia entre vendedor y cliente: '
             f'<strong style="color:{T.TEXT};">{distancia_km:.0f} km</strong>.<br/>'
-            f'La línea gris en el gauge marca la tasa de retraso global '
+            f'La línea gris del medidor marca el promedio del negocio '
             f'({base_rate:.2%}).'
             f'</div>'
             f'</div>'
@@ -180,17 +181,17 @@ def render():
         st.markdown(block, unsafe_allow_html=True)
 
     # ---- Importancias --------------------------------------------------
-    st.markdown(T.section("Importancia de variables — Random Forest tuneado",
-                           badge="Explainability",
-                           meta="Top 12"),
+    st.markdown(T.section("Qué factores influyen más en el retraso",
+                           badge="Explicación",
+                           meta="los 12 más importantes"),
                  unsafe_allow_html=True)
     st.plotly_chart(C.bar_importancias(D.load_importancias(), top=12),
                      use_container_width=True, theme=None)
 
     # ---- Comparación v1 vs v2 ------------------------------------------
-    st.markdown(T.section("Comparación de modelos: v1 vs v2",
-                           badge="Benchmarks",
-                           meta="80/20 estratificado"),
+    st.markdown(T.section("Mejora del modelo: versión 1 vs versión 2",
+                           badge="Comparativa",
+                           meta="probado con datos nuevos"),
                  unsafe_allow_html=True)
     cmp = D.load_comparacion_v1v2()
     keep = ["Árbol decisión (v1)", "Árbol GridSearch (v1)",

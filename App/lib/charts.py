@@ -28,10 +28,10 @@ def bar_estado_retraso(df: pd.DataFrame, top_n: int = 15) -> go.Figure:
         text=[f"{v:.1f}%" for v in d["pct"]],
         textposition="outside",
         textfont=dict(family="JetBrains Mono", color=T.TEXT, size=11),
-        hovertemplate="<b>%{y}</b><br>Pedidos: %{customdata:,}<br>Retraso: %{x:.2f}%<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>Pedidos: %{customdata:,}<br>Con retraso: %{x:.2f}%<extra></extra>",
         customdata=d["pedidos"],
     ))
-    fig.update_xaxes(title="Tasa de retraso (%)", ticksuffix="%")
+    fig.update_xaxes(title="% de pedidos con retraso", ticksuffix="%")
     fig.update_yaxes(title="", autorange="reversed")
     return _apply(fig, height=max(280, 22 * len(d)))
 
@@ -46,15 +46,15 @@ def line_tendencia_mensual(df: pd.DataFrame) -> go.Figure:
         yaxis="y2",
     ))
     fig.add_trace(go.Scatter(
-        x=df["aniomes"], y=df["tasa_retraso"] * 100, name="Tasa de retraso (%)",
+        x=df["aniomes"], y=df["tasa_retraso"] * 100, name="% con retraso",
         mode="lines+markers",
         line=dict(color=T.AMBER, width=2.2),
         marker=dict(size=7, color=T.AMBER, line=dict(color=T.BG, width=1.5)),
-        hovertemplate="<b>%{x|%b %Y}</b><br>Retraso: %{y:.2f}%<extra></extra>",
+        hovertemplate="<b>%{x|%b %Y}</b><br>Con retraso: %{y:.2f}%<extra></extra>",
     ))
     fig.update_layout(
         xaxis=dict(title=""),
-        yaxis=dict(title="Tasa de retraso (%)", ticksuffix="%", side="left",
+        yaxis=dict(title="% de pedidos con retraso", ticksuffix="%", side="left",
                     rangemode="tozero"),
         yaxis2=dict(title="Pedidos", overlaying="y", side="right",
                      showgrid=False, rangemode="tozero"),
@@ -67,7 +67,7 @@ def line_tendencia_mensual(df: pd.DataFrame) -> go.Figure:
 # --- Top categorías ---------------------------------------------------------
 def bar_categorias(df: pd.DataFrame, metric: str = "ingresos") -> go.Figure:
     d = df.sort_values(metric, ascending=True).copy()
-    label = "Ingresos (R$)" if metric == "ingresos" else "Ítems vendidos"
+    label = "Ingresos (R$)" if metric == "ingresos" else "Productos vendidos"
     txt = ([f"R$ {v/1e6:.2f}M" for v in d[metric]] if metric == "ingresos"
            else [f"{int(v):,}" for v in d[metric]])
     fig = go.Figure(go.Bar(
@@ -92,9 +92,9 @@ def forecast_chart(historico: pd.DataFrame, alertas: pd.DataFrame,
 
     fig.add_trace(go.Scatter(
         x=historico["fecha"], y=historico["demanda"],
-        name="Demanda histórica", mode="lines",
+        name="Ventas reales (lo que ya pasó)", mode="lines",
         line=dict(color=T.SKY, width=1.5),
-        hovertemplate="<b>%{x|%d %b %Y}</b><br>Demanda: %{y}<extra></extra>",
+        hovertemplate="<b>%{x|%d %b %Y}</b><br>Ventas: %{y}<extra></extra>",
     ))
 
     if not alertas.empty:
@@ -105,14 +105,14 @@ def forecast_chart(historico: pd.DataFrame, alertas: pd.DataFrame,
         fig.add_trace(go.Scatter(
             x=a["fecha"], y=a["p90_hist"], mode="lines",
             line=dict(color=T.ROSE, width=1, dash="dot"),
-            name="P90 histórico",
-            hovertemplate="<b>%{x|%d %b %Y}</b><br>P90: %{y:.1f}<extra></extra>",
+            name="Máximo histórico",
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Máximo histórico: %{y:.1f}<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=a["fecha"], y=a["p10_hist"], mode="lines",
             line=dict(color=T.EMERALD, width=1, dash="dot"),
-            name="P10 histórico",
-            hovertemplate="<b>%{x|%d %b %Y}</b><br>P10: %{y:.1f}<extra></extra>",
+            name="Mínimo histórico",
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Mínimo histórico: %{y:.1f}<extra></extra>",
         ))
 
         # Banda IC 90 %
@@ -123,19 +123,22 @@ def forecast_chart(historico: pd.DataFrame, alertas: pd.DataFrame,
         fig.add_trace(go.Scatter(
             x=a["fecha"], y=a["lim_inf"], mode="lines",
             line=dict(width=0), fill="tonexty",
-            fillcolor="rgba(245,158,11,0.18)", name="IC 90% SARIMA",
-            hovertemplate="<b>%{x|%d %b %Y}</b><br>IC inf: %{y:.1f}<extra></extra>",
+            fillcolor="rgba(245,158,11,0.18)", name="Rango esperado",
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Mínimo esperado: %{y:.1f}<extra></extra>",
         ))
 
         # Pronóstico puntual
         fig.add_trace(go.Scatter(
             x=a["fecha"], y=a["pronostico"], mode="lines",
             line=dict(color=T.AMBER, width=2.4),
-            name="Pronóstico SARIMA",
-            hovertemplate="<b>%{x|%d %b %Y}</b><br>Pronóstico: %{y:.1f}<extra></extra>",
+            name="Lo que se espera vender",
+            hovertemplate="<b>%{x|%d %b %Y}</b><br>Esperado: %{y:.1f}<extra></extra>",
         ))
 
         # Marcadores de alertas
+        labels = {"STOCKOUT": "Riesgo de quedarse sin stock",
+                  "SOBRE-STOCK": "Riesgo de exceso de inventario",
+                  "OK": "Día normal"}
         for tipo, color, sym in [("STOCKOUT", T.ROSE, "triangle-up"),
                                    ("SOBRE-STOCK", T.AMBER, "triangle-down"),
                                    ("OK", T.EMERALD, "circle")]:
@@ -144,21 +147,21 @@ def forecast_chart(historico: pd.DataFrame, alertas: pd.DataFrame,
                 continue
             fig.add_trace(go.Scatter(
                 x=sub["fecha"], y=sub["pronostico"],
-                mode="markers", name=tipo,
+                mode="markers", name=labels[tipo],
                 marker=dict(color=color, size=10, symbol=sym,
                              line=dict(color=T.BG, width=1.2)),
-                hovertemplate="<b>%{x|%d %b %Y}</b><br>" + tipo
-                              + "<br>Pronóstico: %{y:.1f}<extra></extra>",
+                hovertemplate="<b>%{x|%d %b %Y}</b><br>" + labels[tipo]
+                              + "<br>Esperado: %{y:.1f}<extra></extra>",
             ))
 
     fig.update_layout(
-        title=f"Demanda diaria — {categoria}",
+        title=f"Ventas por día — {categoria}",
         legend=dict(orientation="h", yanchor="bottom", y=1.02,
                      xanchor="right", x=1),
         hovermode="x unified",
     )
     fig.update_xaxes(title="")
-    fig.update_yaxes(title="Items / día", rangemode="tozero")
+    fig.update_yaxes(title="Productos vendidos por día", rangemode="tozero")
     return _apply(fig, height=460)
 
 
@@ -175,9 +178,9 @@ def scatter_sellers(df: pd.DataFrame, color_palette: list[str]) -> go.Figure:
                     "ingresos_totales": ":,.0f",
                     "tasa_retraso": ":.2%",
                     "ingresos_log": False},
-        labels={"tasa_retraso": "Tasa de retraso",
-                "ingresos_log": "Ingresos (log₁₀ R$)",
-                "etiqueta": "Cluster"},
+        labels={"tasa_retraso": "% de pedidos con retraso",
+                "ingresos_log": "Ingresos (escala comprimida)",
+                "etiqueta": "Grupo"},
     )
     fig.update_traces(marker=dict(line=dict(width=0.5, color=T.BG)))
     fig.update_xaxes(tickformat=".0%")
@@ -195,9 +198,9 @@ def bar_importancias(df: pd.DataFrame, top: int = 12) -> go.Figure:
         text=[f"{v:.3f}" for v in d["importancia"]],
         textposition="outside",
         textfont=dict(family="JetBrains Mono", color=T.TEXT_DIM, size=11),
-        hovertemplate="<b>%{y}</b><br>Importancia: %{x:.4f}<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>Peso: %{x:.4f}<extra></extra>",
     ))
-    fig.update_xaxes(title="Importancia (Gini)")
+    fig.update_xaxes(title="Peso del factor en la predicción")
     fig.update_yaxes(title="")
     return _apply(fig, height=max(280, 26 * len(d)))
 
@@ -238,8 +241,10 @@ def gauge_prob(prob: float, base: float) -> go.Figure:
 def bar_compare_v1v2(df: pd.DataFrame) -> go.Figure:
     """`df` debe tener columnas: modelo, f1_1, roc_auc, pr_auc, recall_1."""
     metrics = ["f1_1", "roc_auc", "pr_auc", "recall_1"]
-    names = {"f1_1": "F1", "roc_auc": "ROC-AUC",
-             "pr_auc": "PR-AUC", "recall_1": "Recall"}
+    names = {"f1_1": "Calidad general",
+             "roc_auc": "Capacidad de distinguir",
+             "pr_auc": "Precisión en casos difíciles",
+             "recall_1": "Retrasos detectados"}
     long = df.melt(id_vars="modelo", value_vars=metrics,
                     var_name="metrica", value_name="valor")
     long["metrica"] = long["metrica"].map(names)
@@ -249,7 +254,7 @@ def bar_compare_v1v2(df: pd.DataFrame) -> go.Figure:
     fig.update_traces(textposition="outside",
                        textfont=dict(family="JetBrains Mono",
                                      color=T.TEXT_DIM, size=10))
-    fig.update_yaxes(title="Valor", rangemode="tozero")
+    fig.update_yaxes(title="Puntaje (mayor es mejor)", rangemode="tozero")
     fig.update_xaxes(title="", tickangle=-15)
     fig.update_layout(legend=dict(orientation="h", yanchor="bottom",
                                    y=1.02, xanchor="right", x=1))

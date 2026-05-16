@@ -17,9 +17,9 @@ def render():
     metricas = D.load_metricas_series()
 
     # ---- Selector de categoría ----------------------------------------
-    st.markdown(T.section("Sistema de pronóstico SARIMA + alertas tempranas",
-                           badge="Time series",
-                           meta="Horizonte 14 días · IC 90 % · 5 categorías top"),
+    st.markdown(T.section("Pronóstico de ventas y avisos tempranos",
+                           badge="Próximos días",
+                           meta="14 días hacia adelante · 5 categorías principales"),
                  unsafe_allow_html=True)
 
     c1, c2 = st.columns([1, 3])
@@ -37,13 +37,13 @@ def render():
             sarima = m[m["modelo"].str.contains("SARIMA")]
             chips = []
             if not sarima.empty:
-                chips.append(T.chip(f"SARIMA sMAPE {sarima['sMAPE_%'].iloc[0]:.2f}%", "info"))
+                chips.append(T.chip(f"Error del pronóstico inteligente: {sarima['sMAPE_%'].iloc[0]:.2f}%", "info"))
             if not naive.empty:
-                chips.append(T.chip(f"Naïve sMAPE {naive['sMAPE_%'].iloc[0]:.2f}%", "neutral"))
+                chips.append(T.chip(f"Error del método simple: {naive['sMAPE_%'].iloc[0]:.2f}%", "neutral"))
             if not sarima.empty and not naive.empty:
                 d = naive['sMAPE_%'].iloc[0] - sarima['sMAPE_%'].iloc[0]
                 chips.append(T.chip(
-                    f"Δ {d:+.2f} pp", "ok" if d > 0 else "warn"))
+                    f"Mejora: {d:+.2f} puntos", "ok" if d > 0 else "warn"))
             st.markdown(" ".join(chips), unsafe_allow_html=True)
 
     # ---- KPIs de alertas de la categoría --------------------------------
@@ -54,13 +54,13 @@ def render():
     n_total    = len(al_cat)
 
     st.markdown(T.kpi_grid(
-        T.kpi_card("Alertas STOCKOUT (14 d)", str(n_stockout),
-                    delta="reabastecer", delta_dir="down"),
-        T.kpi_card("Alertas SOBRE-STOCK (14 d)", str(n_sobre),
-                    delta="promoción", delta_dir="neutral"),
-        T.kpi_card("Días en banda (OK)", str(n_ok),
-                    delta="operación normal", delta_dir="up"),
-        T.kpi_card("Total días analizados", str(n_total)),
+        T.kpi_card("Días en riesgo de quedarse sin stock", str(n_stockout),
+                    delta="hay que reabastecer", delta_dir="down"),
+        T.kpi_card("Días con riesgo de inventario de más", str(n_sobre),
+                    delta="conviene promocionar", delta_dir="neutral"),
+        T.kpi_card("Días dentro de lo normal", str(n_ok),
+                    delta="todo bajo control", delta_dir="up"),
+        T.kpi_card("Días analizados en total", str(n_total)),
     ), unsafe_allow_html=True)
 
     # ---- Gráfica principal --------------------------------------------
@@ -74,41 +74,41 @@ def render():
     )
 
     # ---- Tabla de alertas accionables ---------------------------------
-    st.markdown(T.section("Alertas accionables · próximos 14 días",
+    st.markdown(T.section("Avisos para tomar acción · próximos 14 días",
                            badge="Operación",
-                           meta=f"{n_total} eventos"),
+                           meta=f"{n_total} días"),
                  unsafe_allow_html=True)
 
     if al_cat.empty:
-        st.info("No hay alertas para esta categoría.")
+        st.info("No hay avisos para esta categoría.")
     else:
         tabla = al_cat.sort_values("fecha")[
             ["fecha", "tipo", "lim_inf", "lim_sup",
              "p10_hist", "p90_hist", "mensaje"]
         ].rename(columns={
             "fecha":     "Fecha",
-            "tipo":      "Tipo",
-            "lim_inf":   "IC inferior",
-            "lim_sup":   "IC superior",
-            "p10_hist":  "P10 hist.",
-            "p90_hist":  "P90 hist.",
-            "mensaje":   "Mensaje accionable",
+            "tipo":      "Tipo de aviso",
+            "lim_inf":   "Mínimo esperado",
+            "lim_sup":   "Máximo esperado",
+            "p10_hist":  "Mínimo histórico",
+            "p90_hist":  "Máximo histórico",
+            "mensaje":   "Acción recomendada",
         })
         tabla["Fecha"] = tabla["Fecha"].dt.strftime("%Y-%m-%d")
         st.dataframe(
             tabla, use_container_width=True, hide_index=True,
             column_config={
-                "IC inferior": st.column_config.NumberColumn(format="%.1f"),
-                "IC superior": st.column_config.NumberColumn(format="%.1f"),
-                "P10 hist.":   st.column_config.NumberColumn(format="%.1f"),
-                "P90 hist.":   st.column_config.NumberColumn(format="%.1f"),
+                "Mínimo esperado":  st.column_config.NumberColumn(format="%.1f"),
+                "Máximo esperado":  st.column_config.NumberColumn(format="%.1f"),
+                "Mínimo histórico": st.column_config.NumberColumn(format="%.1f"),
+                "Máximo histórico": st.column_config.NumberColumn(format="%.1f"),
             },
         )
 
     # ---- Comparativa de modelos ---------------------------------------
-    st.markdown(T.section("Naïve estacional vs SARIMA — todas las categorías",
-                           badge="Benchmarks",
-                           meta="sMAPE últimos 30 días"),
+    st.markdown(T.section("Qué tan bien predice el sistema en cada categoría",
+                           badge="Comparativa",
+                           meta="error de los últimos 30 días"),
                  unsafe_allow_html=True)
     piv = (metricas.pivot(index="categoria", columns="modelo", values="sMAPE_%")
                     .reset_index()

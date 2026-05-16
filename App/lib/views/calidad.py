@@ -10,45 +10,46 @@ def render():
     ped = D.load_pedidos()
     ven = D.load_ventas_min()
 
-    st.markdown(T.section("Trazabilidad de calidad y enriquecimiento",
-                           badge="Data quality",
-                           meta="Notebooks 01 · 02 · 03 · 04"),
+    st.markdown(T.section("Cómo limpiamos y preparamos la información",
+                           badge="Calidad",
+                           meta="resumen del proceso"),
                  unsafe_allow_html=True)
 
     st.markdown(T.callout(
-        "Resumen de las decisiones de limpieza, validación del cubo, "
-        "bug-fix de traducción de categorías y enriquecimiento exógeno con "
-        "el calendario brasileño. Cada bloque enlaza con su notebook fuente."
+        "Antes de analizar nada, hay que asegurarse de que los datos sean "
+        "confiables. Aquí mostramos qué limpiamos, qué errores encontramos y "
+        "cómo agregamos información extra (como feriados y días de oferta) "
+        "para que los análisis sean más certeros."
     ), unsafe_allow_html=True)
 
     # ---- Resumen de limpieza ------------------------------------------
     st.markdown(T.kpi_grid(
-        T.kpi_card("Tablas Olist limpiadas", "9",
-                    delta="01_limpieza_datos_olist", delta_dir="neutral"),
-        T.kpi_card("Duplicados eliminados (geo)", "261 831",
-                    delta="98.1% reducción", delta_dir="up"),
-        T.kpi_card("Filas geo válidas", "19 010",
-                    delta="lat/lng dentro de BR", delta_dir="neutral"),
-        T.kpi_card("Erratas categorías corregidas", "5",
-                    delta="ortografía EN", delta_dir="neutral"),
+        T.kpi_card("Archivos originales limpiados", "9",
+                    delta="paso 1: limpieza", delta_dir="neutral"),
+        T.kpi_card("Registros duplicados eliminados", "261 831",
+                    delta="98.1% menos", delta_dir="up"),
+        T.kpi_card("Ubicaciones válidas verificadas", "19 010",
+                    delta="coordenadas dentro de Brasil", delta_dir="neutral"),
+        T.kpi_card("Errores de ortografía corregidos", "5",
+                    delta="en nombres de categorías", delta_dir="neutral"),
     ), unsafe_allow_html=True)
 
     # ---- Validaciones del cubo ----------------------------------------
-    st.markdown(T.section("Validaciones del Data Warehouse",
-                           badge="ETL · cubo",
-                           meta="02_etl_data_warehouse"),
+    st.markdown(T.section("Comprobaciones de que todo cuadra",
+                           badge="Verificación",
+                           meta="ningún número se quedó suelto"),
                  unsafe_allow_html=True)
 
     validations = [
-        ("Llaves únicas en todas las dimensiones", "100 %", "ok"),
-        ("Integridad customer_id → dim_cliente", "100 %", "ok"),
-        ("Integridad product_id → dim_producto", "100 %", "ok"),
-        ("Integridad seller_id → dim_vendedor", "100 %", "ok"),
-        ("Integridad fecha_key → dim_tiempo", "100 %", "ok"),
-        ("Integridad pago_key → dim_pago (sentinela SIN_PAGO)", "100 %", "ok"),
-        ("Suma price items vs fact_ventas", "R$ 13.59 M = R$ 13.59 M", "ok"),
-        ("Suma freight_value items vs fact_ventas", "R$ 2.25 M = R$ 2.25 M", "ok"),
-        ("Suma payment_value (pedidos con items)", "R$ 15.85 M = R$ 15.85 M", "ok"),
+        ("Cada cliente, producto y vendedor tiene un código único", "100 %", "ok"),
+        ("Todos los clientes están bien registrados", "100 %", "ok"),
+        ("Todos los productos están bien registrados", "100 %", "ok"),
+        ("Todos los vendedores están bien registrados", "100 %", "ok"),
+        ("Todas las fechas están bien clasificadas", "100 %", "ok"),
+        ("Todos los métodos de pago están bien clasificados", "100 %", "ok"),
+        ("El total de ventas coincide entre archivos", "R$ 13.59 M = R$ 13.59 M", "ok"),
+        ("El total de envíos coincide entre archivos", "R$ 2.25 M = R$ 2.25 M", "ok"),
+        ("El total cobrado coincide con lo facturado", "R$ 15.85 M = R$ 15.85 M", "ok"),
     ]
     cols = st.columns(3)
     for i, (name, val, kind) in enumerate(validations):
@@ -65,9 +66,9 @@ def render():
             st.markdown(card, unsafe_allow_html=True)
 
     # ---- Bug fix de traducción ----------------------------------------
-    st.markdown(T.section("Bug-fix · product_category_name_english",
-                           badge="Notebook 03",
-                           meta="04_correccion_traduccion"),
+    st.markdown(T.section("Corrección · traducción de categorías al inglés",
+                           badge="Corrección",
+                           meta="un detalle que perdía toda la información"),
                  unsafe_allow_html=True)
     c1, c2 = st.columns([1, 1])
     desc_style = (f"color:{T.TEXT_DIM}; font-size:12.5px; margin-top:8px;"
@@ -75,30 +76,31 @@ def render():
     with c1:
         st.markdown(T.compact(
             f'<div class="kpi" style="border-left:3px solid {T.ROSE};">'
-            f'<div class="label">Antes del fix</div>'
-            f'<div class="value" style="font-size:22px; color:{T.ROSE};">100 % nulos</div>'
+            f'<div class="label">Antes de corregirlo</div>'
+            f'<div class="value" style="font-size:22px; color:{T.ROSE};">100 % sin traducir</div>'
             f'<div style="{desc_style}">'
-            f'El merge se hacía contra <code>Esporte Lazer</code> (Title Case, '
-            f'post-limpieza) mientras la tabla de traducción conserva '
-            f'<code>esporte_lazer</code> (snake_case). 0 matches en 112,650 filas.'
+            f'Los nombres de categorías estaban escritos de forma distinta en '
+            f'dos lugares (uno con espacios, otro con guiones bajos). '
+            f'Ninguno coincidía, así que <strong>ninguna</strong> de las '
+            f'112,650 filas se pudo traducir al inglés.'
             f'</div></div>'
         ), unsafe_allow_html=True)
     with c2:
         st.markdown(T.compact(
             f'<div class="kpi" style="border-left:3px solid {T.EMERALD};">'
-            f'<div class="label">Después del fix</div>'
-            f'<div class="value" style="font-size:22px; color:{T.EMERALD};">100 % cobertura</div>'
+            f'<div class="label">Después de corregirlo</div>'
+            f'<div class="value" style="font-size:22px; color:{T.EMERALD};">100 % traducidas</div>'
             f'<div style="{desc_style}">'
-            f'Diccionario canónico de <strong style="color:{T.TEXT};">74 entradas</strong> '
-            f'(71 oficiales + casa_conforto_2 + eletrodomesticos_2 + sin_categoria). '
-            f'Conversión Title Case → snake_case en el join.'
+            f'Armamos un diccionario con <strong style="color:{T.TEXT};">74 categorías</strong> '
+            f'(las 71 oficiales más 3 variantes especiales) y unificamos el '
+            f'formato. Ahora todas las categorías tienen su traducción.'
             f'</div></div>'
         ), unsafe_allow_html=True)
 
     # ---- Enriquecimiento exógeno (calendario) -------------------------
-    st.markdown(T.section("Enriquecimiento exógeno · Calendario BR",
-                           badge="Notebook 04",
-                           meta="holidays + Carnaval + retail"),
+    st.markdown(T.section("Calendario brasileño · días especiales",
+                           badge="Información extra",
+                           meta="feriados, Carnaval y ofertas comerciales"),
                  unsafe_allow_html=True)
 
     n_feriado    = int(cal["es_feriado_nacional"].sum())
@@ -107,26 +109,26 @@ def render():
     n_no_laboral = int(cal["es_dia_no_laboral"].sum())
 
     st.markdown(T.kpi_grid(
-        T.kpi_card("Días en el calendario", f"{len(cal):,}",
-                    delta="2016-01-01 → 2018-12-31", delta_dir="neutral"),
+        T.kpi_card("Días totales considerados", f"{len(cal):,}",
+                    delta="del 2016 al 2018", delta_dir="neutral"),
         T.kpi_card("Feriados nacionales", str(n_feriado)),
         T.kpi_card("Días de Carnaval", str(n_carnaval)),
-        T.kpi_card("Eventos retail (BF, CM, ...)", str(n_retail)),
+        T.kpi_card("Días de ofertas (Black Friday, Cyber Monday...)", str(n_retail)),
     ), unsafe_allow_html=True)
 
     # Tasa de retraso por cohorte exógena (sanity)
     if "es_evento_retail" in ped.columns:
         cohortes = []
         media = ped["is_late_delivery"].mean()
-        cohortes.append(("Media global",     media,                                            "neutral"))
-        cohortes.append(("Feriado nacional", ped.loc[ped["es_feriado_nacional"] == 1, "is_late_delivery"].mean(), "warn"))
-        cohortes.append(("Carnaval",         ped.loc[ped["es_carnaval"] == 1, "is_late_delivery"].mean(),         "warn"))
-        cohortes.append(("Evento retail",    ped.loc[ped["es_evento_retail"] == 1, "is_late_delivery"].mean(),    "alert"))
-        cohortes.append(("Fin de semana",    ped.loc[ped["es_fin_semana"] == 1, "is_late_delivery"].mean(),       "neutral"))
+        cohortes.append(("Promedio general",   media,                                            "neutral"))
+        cohortes.append(("En feriado nacional", ped.loc[ped["es_feriado_nacional"] == 1, "is_late_delivery"].mean(), "warn"))
+        cohortes.append(("En Carnaval",         ped.loc[ped["es_carnaval"] == 1, "is_late_delivery"].mean(),         "warn"))
+        cohortes.append(("En día de oferta",    ped.loc[ped["es_evento_retail"] == 1, "is_late_delivery"].mean(),    "alert"))
+        cohortes.append(("En fin de semana",    ped.loc[ped["es_fin_semana"] == 1, "is_late_delivery"].mean(),       "neutral"))
 
-        st.markdown(T.section("Discriminatividad de las banderas exógenas",
+        st.markdown(T.section("¿Las fechas especiales realmente afectan los retrasos?",
                                badge="Validación",
-                               meta="tasa de retraso por cohorte"),
+                               meta="% de pedidos con retraso por tipo de día"),
                      unsafe_allow_html=True)
         cols = st.columns(len(cohortes))
         for i, (name, rate, kind) in enumerate(cohortes):
@@ -140,24 +142,24 @@ def render():
                     f'<div class="kpi">'
                     f'<div class="label">{name}</div>'
                     f'<div class="value">{pct:.2f}<span class="unit">%</span></div>'
-                    f'<div class="delta {arrow}">×{ratio:.2f} vs media</div>'
+                    f'<div class="delta {arrow}">×{ratio:.2f} vs promedio</div>'
                     f'</div>'
                 ), unsafe_allow_html=True)
 
     # ---- Banderas de calidad de reviews -------------------------------
-    st.markdown(T.section("Banderas de calidad de reviews",
-                           badge="Notebook 01",
-                           meta="conservadas como atributos"),
+    st.markdown(T.section("Reseñas sospechosas que detectamos",
+                           badge="Calidad de reseñas",
+                           meta="señales para identificar reseñas poco confiables"),
                  unsafe_allow_html=True)
     flags = [
-        ("flag_short_message",           int(ped["flag_short_message"].sum()),
-         "Mensajes de 1–3 caracteres (probable ruido)"),
-        ("flag_answer_before_creation",  int(ped["flag_answer_before_creation"].sum()),
-         "Respuesta del seller antes de la creación del review (errata)"),
-        ("flag_review_id_duplicated",    int(ped["flag_review_id_duplicated"].sum()),
-         "review_id duplicado entre pedidos"),
-        ("flag_review_id_multi_order",   int(ped["flag_review_id_multi_order"].sum()),
-         "review_id asociado a múltiples pedidos"),
+        ("Mensajes demasiado cortos",           int(ped["flag_short_message"].sum()),
+         "Reseñas de solo 1 a 3 letras (probablemente sin contenido real)"),
+        ("Respuestas antes que la reseña",  int(ped["flag_answer_before_creation"].sum()),
+         "El vendedor respondió antes de que existiera la reseña (error de fecha)"),
+        ("Mismo identificador de reseña repetido",    int(ped["flag_review_id_duplicated"].sum()),
+         "La misma reseña aparece más de una vez"),
+        ("Una reseña ligada a varios pedidos",   int(ped["flag_review_id_multi_order"].sum()),
+         "Una reseña que está conectada a más de un pedido distinto"),
     ]
     cols = st.columns(2)
     for i, (name, count, desc) in enumerate(flags):

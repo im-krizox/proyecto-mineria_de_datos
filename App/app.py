@@ -41,21 +41,21 @@ st.markdown(T.CSS, unsafe_allow_html=True)
 # ---- Hero ------------------------------------------------------------------
 st.markdown(T.hero(
     eyebrow="Smart Supply Chain · Nexus Supply · 2016 – 2018",
-    title="Predictive Operations Dashboard",
-    subtitle=("Plataforma de inteligencia operativa sobre el dataset Olist. "
-              "Diagnóstico de la cadena de suministro, modelo de predicción "
-              "de retraso (Random Forest v2), pronóstico SARIMA de demanda y "
-              "segmentación K-Means de sellers — todo en un solo cockpit."),
+    title="Tablero de Operaciones Inteligente",
+    subtitle=("Una vista clara y completa del negocio: cómo se comportan las "
+              "ventas, dónde ocurren los retrasos en las entregas, qué se "
+              "espera vender en las próximas dos semanas y qué tipo de "
+              "vendedores tenemos. Todo en un mismo lugar, fácil de leer."),
 ), unsafe_allow_html=True)
 
 
 # ---- Tabs ------------------------------------------------------------------
 tabs = st.tabs([
-    "Visión general",
-    "Predicción de retraso",
-    "Pronóstico de demanda",
-    "Segmentación de sellers",
-    "Calidad de datos",
+    "Resumen del negocio",
+    "Riesgo de retraso",
+    "Pronóstico de ventas",
+    "Tipos de vendedores",
+    "Preparación de datos",
 ])
 
 with tabs[0]:

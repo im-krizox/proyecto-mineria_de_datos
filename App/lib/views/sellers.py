@@ -18,15 +18,17 @@ def render():
     clu = D.load_clusters()
     perf = D.load_perfil_clusters()
 
-    st.markdown(T.section("Segmentación operativa de sellers",
-                           badge="K-Means · k=3",
-                           meta=f"{len(clu):,} sellers"),
+    st.markdown(T.section("Tipos de vendedores en la plataforma",
+                           badge="3 grupos",
+                           meta=f"{len(clu):,} vendedores"),
                  unsafe_allow_html=True)
 
     st.markdown(T.callout(
-        "Los <strong>3,095 sellers</strong> de Olist se agrupan en tres clusters "
-        "operativos según volumen, ticket, servicio, satisfacción y alcance. "
-        "Cada cluster recibe una estrategia diferenciada de reabastecimiento."
+        "Los <strong>3,095 vendedores</strong> de la plataforma se acomodan en "
+        "tres grupos naturales, según cuánto venden, qué tan caros son sus "
+        "productos, qué tan bien entregan, qué tan contentos quedan sus "
+        "clientes y a cuántos estados llegan. A cada grupo le conviene una "
+        "estrategia diferente para mantener inventario."
     ), unsafe_allow_html=True)
 
     # ---- Tarjetas por cluster ----------------------------------------
@@ -43,16 +45,16 @@ def render():
                      else "info" if "Mediano" in label else "alert")
             card = T.compact(
                 f'<div class="kpi" style="border-left:3px solid {color};">'
-                f'<div class="label">Cluster {row["cluster"]} · {row["n_sellers"]:,} sellers</div>'
+                f'<div class="label">Grupo {row["cluster"] + 1} · {row["n_sellers"]:,} vendedores</div>'
                 f'<div class="value" style="font-size:18px; line-height:1.3;">{label}</div>'
                 f'<div style="{metrics_style}">'
-                f'<div>Pedidos prom: <strong style="color:{T.TEXT};">{row["n_pedidos"]:.0f}</strong></div>'
-                f'<div>Ingresos prom: <strong style="color:{T.TEXT};">R$ {row["ingresos_totales"]:,.0f}</strong></div>'
-                f'<div>Tasa retraso: <strong style="color:{T.TEXT};">{row["tasa_retraso"]*100:.2f}%</strong></div>'
-                f'<div>Review: <strong style="color:{T.TEXT};">{row["review_promedio"]:.2f}</strong> / 5</div>'
-                f'<div>Alcance: <strong style="color:{T.TEXT};">{row["n_estados_clientes"]:.0f}</strong> estados</div>'
+                f'<div>Pedidos en promedio: <strong style="color:{T.TEXT};">{row["n_pedidos"]:.0f}</strong></div>'
+                f'<div>Ingresos en promedio: <strong style="color:{T.TEXT};">R$ {row["ingresos_totales"]:,.0f}</strong></div>'
+                f'<div>Entregas con retraso: <strong style="color:{T.TEXT};">{row["tasa_retraso"]*100:.2f}%</strong></div>'
+                f'<div>Calificación: <strong style="color:{T.TEXT};">{row["review_promedio"]:.2f}</strong> / 5</div>'
+                f'<div>Llega a: <strong style="color:{T.TEXT};">{row["n_estados_clientes"]:.0f}</strong> estados</div>'
                 f'</div>'
-                f'<div style="margin-top:10px;">{T.chip("Estrategia", kind)}</div>'
+                f'<div style="margin-top:10px;">{T.chip("Recomendación", kind)}</div>'
                 f'<div style="color:{T.TEXT_DIM}; font-size:12.5px; margin-top:6px;'
                 f' line-height:1.45;">{row["estrategia_reabastecimiento"]}</div>'
                 f'</div>'
@@ -60,9 +62,9 @@ def render():
             st.markdown(card, unsafe_allow_html=True)
 
     # ---- Scatter -----------------------------------------------------
-    st.markdown(T.section("Distribución de sellers (tasa de retraso × ingresos)",
-                           badge="Cluster map",
-                           meta="size = # pedidos"),
+    st.markdown(T.section("Mapa de vendedores: retraso vs ingresos",
+                           badge="Visualización",
+                           meta="cada círculo es un vendedor · tamaño = pedidos"),
                  unsafe_allow_html=True)
     palette = [CLUSTER_COLORS.get(label, T.SLATE)
                 for label in sorted(clu["etiqueta"].unique())]
@@ -70,20 +72,20 @@ def render():
                      use_container_width=True, theme=None)
 
     # ---- Tabla buscable ----------------------------------------------
-    st.markdown(T.section("Explorador de sellers",
-                           badge="Detail",
-                           meta="filtros activos"),
+    st.markdown(T.section("Buscar vendedores",
+                           badge="Detalle",
+                           meta="usa los filtros para acotar"),
                  unsafe_allow_html=True)
     f1, f2, f3 = st.columns([1, 1, 2])
     with f1:
         cluster_sel = st.multiselect(
-            "Cluster", options=clu["etiqueta"].unique().tolist(),
+            "Grupo", options=clu["etiqueta"].unique().tolist(),
             default=clu["etiqueta"].unique().tolist(),
         )
     with f2:
-        min_ped = st.number_input("Pedidos mínimos", min_value=0, value=0, step=10)
+        min_ped = st.number_input("Mínimo de pedidos", min_value=0, value=0, step=10)
     with f3:
-        busqueda = st.text_input("Buscar por seller_id (prefijo)", "")
+        busqueda = st.text_input("Buscar vendedor (primeros caracteres del ID)", "")
 
     flt = clu[clu["etiqueta"].isin(cluster_sel) & (clu["n_pedidos"] >= min_ped)]
     if busqueda:
@@ -95,24 +97,24 @@ def render():
     tabla = flt[show_cols].copy()
     tabla["tasa_retraso"] = tabla["tasa_retraso"] * 100
     tabla = tabla.rename(columns={
-        "seller_id":            "Seller",
-        "etiqueta":             "Cluster",
+        "seller_id":            "Vendedor",
+        "etiqueta":             "Grupo",
         "n_pedidos":            "Pedidos",
         "ingresos_totales":     "Ingresos (R$)",
-        "ticket_promedio":      "Ticket prom",
-        "tasa_retraso":         "Retraso %",
-        "review_promedio":      "Review",
-        "n_estados_clientes":   "Alcance",
-        "estrategia_reabastecimiento": "Estrategia",
+        "ticket_promedio":      "Precio promedio",
+        "tasa_retraso":         "% con retraso",
+        "review_promedio":      "Calificación",
+        "n_estados_clientes":   "Estados a los que llega",
+        "estrategia_reabastecimiento": "Recomendación",
     })
     st.dataframe(
         tabla.sort_values("Ingresos (R$)", ascending=False),
         use_container_width=True, hide_index=True, height=400,
         column_config={
-            "Retraso %":      st.column_config.NumberColumn(format="%.2f"),
-            "Review":         st.column_config.NumberColumn(format="%.2f"),
-            "Ingresos (R$)":  st.column_config.NumberColumn(format="%.0f"),
-            "Ticket prom":    st.column_config.NumberColumn(format="%.2f"),
+            "% con retraso":   st.column_config.NumberColumn(format="%.2f"),
+            "Calificación":    st.column_config.NumberColumn(format="%.2f"),
+            "Ingresos (R$)":   st.column_config.NumberColumn(format="%.0f"),
+            "Precio promedio": st.column_config.NumberColumn(format="%.2f"),
         },
     )
-    st.caption(f"{len(flt):,} de {len(clu):,} sellers tras filtros.")
+    st.caption(f"Mostrando {len(flt):,} de {len(clu):,} vendedores después de aplicar filtros.")
