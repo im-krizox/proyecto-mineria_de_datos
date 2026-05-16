@@ -19,17 +19,18 @@ El proyecto construye un flujo *end-to-end* sobre el dataset público **Olist (B
 7. **Segmentación no supervisada** (K-Means) de los 3,095 sellers en clusters operativos con estrategia de reabastecimiento diferenciada.
 8. **Modelado de series de tiempo** (SARIMA) sobre la demanda diaria por categoría, con sistema de **alertas tempranas de stockout / sobre-stock**.
 
-El proyecto se entrega en siete notebooks y dos archivos de documentación.
+El proyecto se entrega en ocho notebooks y los archivos de documentación de `DOC/` (incluyendo los diagramas OLTP y de DWH en `DOC/diagramas/`).
 
 | Notebook | Propósito | Celdas / Estado |
 |---|---|---|
 | `01_limpieza_datos_olist.ipynb` | Limpieza individual de las 9 tablas Olist | 84 |
 | `02_etl_data_warehouse.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 54 |
-| `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado e hiperparametrización | 114 |
+| `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado v1 e hiperparametrización | 114 |
 | `03_correccion_traduccion_categorias.ipynb` | Re-poblar `product_category_name_english` (rev. 2) | Ejecutado ✓ |
 | `04_enriquecimiento_calendario_brasil.ipynb` | Calendario BR + banderas exógenas (rev. 2) | Ejecutado ✓ |
 | `06_clustering_sellers.ipynb` | K-Means + perfilado + estrategias (rev. 2) | Ejecutado ✓ |
 | `07_series_tiempo_y_alertas.ipynb` | SARIMA + sistema de alertas (rev. 2) | Ejecutado ✓ |
+| `08_modelo_supervisado_v2.ipynb` | Modelo v2 con seller + distancia + calendario (rev. 3) | Ejecutado ✓ |
 
 ---
 
@@ -255,6 +256,73 @@ Se construye `seller_agg` y se hace EDA de distribuciones / atípicos. La ejecuc
 
 ---
 
+## 5-bis. Modelo supervisado v2 (`08_modelo_supervisado_v2.ipynb`)
+
+### 5-bis.1 Motivación
+El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `mes` (importancia 0.33) y `trimestre` (0.21), es decir, en *proxies crudos* de estacionalidad. La rev. 3 reentrena el modelo añadiendo señales causales reales producidas por los notebooks 04 y 06:
+
+| Bloque de features nuevas | Origen |
+|---|---|
+| 7 banderas exógenas (feriado, Carnaval, evento retail, ventana pre-evento) | `04_tad_pedidos_enriquecido.csv` |
+| Cluster operativo del seller + tasa histórica de retraso + review promedio | `06_seller_agg_clusters.csv` |
+| Distancia geodésica seller↔cliente (haversine) | `geo_lat/lng` + `seller_geo_lat/lng` |
+
+### 5-bis.2 Diseño metodológico
+- **Granularidad:** pedido (mismo que v1, para comparabilidad).
+- **Seller dominante:** el de mayor `price` dentro del pedido (cuando hay varios items de sellers distintos).
+- **Split:** estratificado 70/30, `random_state=42` (idéntico a v1).
+- **Pipeline:** `ColumnTransformer` (mediana + most-frequent + OneHotEncoder).
+- **Modelos:** Dummy, Árbol de decisión (v2 con nuevas features), Random Forest baseline (300 árboles), Random Forest tuneado por GridSearchCV (24 combinaciones × 3 folds, `scoring="f1"`).
+- **Tratamiento de fuga:** se mantienen las exclusiones del v1 (`delivery_days_real`, `delivery_delay_days`, `review_score`, etc.).
+
+### 5-bis.3 Resultados
+
+| Modelo | Accuracy | Precision₁ | Recall₁ | **F1₁** | ROC-AUC | PR-AUC |
+|---|---:|---:|---:|---:|---:|---:|
+| Dummy | 0.934 | 0.000 | 0.000 | 0.000 | 0.500 | 0.066 |
+| Árbol v2 | 0.898 | 0.233 | 0.233 | 0.233 | 0.589 | 0.105 |
+| Random Forest baseline | 0.934 | 0.510 | 0.067 | 0.118 | 0.827 | 0.310 |
+| **Random Forest tuneado** | **0.897** | **0.320** | **0.489** | **0.387** | **0.838** | **0.323** |
+
+**Mejor configuración del GridSearch:** `max_depth=20`, `max_features="sqrt"`, `min_samples_leaf=5`, `n_estimators=400`. F1-CV = 0.374.
+
+### 5-bis.4 Comparación v1 → v2
+
+| Métrica | v1 (Árbol GS) | v2 (RF GS) | Δ |
+|---|---:|---:|:---:|
+| Accuracy | 0.74 | 0.90 | +0.16 |
+| Precision₁ | 0.15 | 0.32 | +0.17 (**2.1×**) |
+| Recall₁ | 0.60 | 0.49 | −0.11 |
+| **F1₁** | **0.23** | **0.39** | **+0.16 (1.7×)** |
+| ROC-AUC | 0.72 | 0.84 | +0.12 |
+| **PR-AUC** | **0.17** | **0.32** | **+0.15 (1.9×)** |
+
+El v2 reduce a la mitad la tasa de falsos positivos respecto al v1 (de 85 % a ≈68 % por cada alerta emitida) y casi duplica el PR-AUC, métrica más adecuada al desbalance 93/7. Recall baja porque el modelo se vuelve más selectivo, pero el F1 sube 70 %.
+
+### 5-bis.5 Importancia de variables (Random Forest tuneado)
+
+| Variable | Importancia | Comentario |
+|---|---:|---|
+| `seller_tasa_retraso_hist` | **0.19** | **Top-1:** la historia del seller predice mejor que cualquier feature del pedido |
+| `delivery_days_estimated` | 0.09 | Promesa de entrega |
+| `mes` | 0.09 | Cae de 0.33 → 0.09 (era proxy crudo de calendario) |
+| `distancia_km` | 0.08 | Reemplaza en gran medida a las dummies de `customer_state` |
+| `seller_review_promedio` | 0.07 | Calidad histórica del seller |
+| `dias_a_proximo_evento` | 0.06 | Bandera exógena del calendario BR |
+| `payment_value` | 0.06 | |
+| `dia`, `trimestre` | 0.05, 0.05 | |
+| `customer_state_SP`, `geo_state_SP/RJ` | 0.04 (total) | Geografía del cliente |
+
+**Lectura cualitativa:** el modelo deja de apoyarse en proxies y se apoya en **señales causales** (qué seller, a qué distancia, en qué contexto exógeno). Esto valida la inversión hecha en los notebooks 04 (calendario) y 06 (clustering).
+
+### 5-bis.6 Outputs
+- `08_resultados_modelo_v2.csv` — métricas de los 4 modelos v2.
+- `08_comparacion_v1_v2.csv` — tabla unificada v1 vs v2.
+- `08_importancias_rf_tuneado.csv` — ranking completo de importancias.
+- `08_resultados_gridsearch_rf.csv` — todas las combinaciones probadas.
+
+---
+
 ## 6. Capa 4 — Bug fix de traducción de categorías (`03_correccion_traduccion_categorias.ipynb`)
 
 ### 6.1 Diagnóstico
@@ -371,12 +439,57 @@ Ejemplos accionables: *“`computers_accessories` 2018-08-13 — STOCKOUT, deman
 
 ---
 
+## 8-bis. Interfaz web — *Predictive Ops Dashboard* (`App/app.py`)
+
+### 8-bis.1 Arquitectura
+Aplicación **Streamlit 1.57 + Plotly 6.7** sobre los outputs de los notebooks 02–08. La app NO re-entrena ni recalcula; consume artefactos persistidos (`CSV/*`, `Modelado/_modelo/rf_v2_pipeline.joblib`).
+
+```
+App/
+├── app.py                  # Entry point + hero + tabs
+├── .streamlit/config.toml  # Tema oscuro (primary #f59e0b sobre #0b1220)
+└── lib/
+    ├── theme.py            # Paleta + CSS global + helpers (hero, kpi_card, chip)
+    ├── data.py             # Carga cacheada (@st.cache_data, @st.cache_resource)
+    ├── charts.py           # Plotly templates: bar_estado, forecast_chart, gauge_prob, …
+    └── views/{overview, prediccion, pronostico, sellers, calidad}.py
+```
+
+### 8-bis.2 Vistas
+
+| # | Vista | Contenido |
+|---|---|---|
+| 1 | **Visión general** | 6 KPIs ejecutivos (pedidos, ítems, GMV, sellers, productos, retraso) · tendencia mensual de pedidos vs tasa de retraso · top 10 categorías por ingresos · top 12 estados por tasa de retraso |
+| 2 | **Predicción de retraso** | Calculadora interactiva del modelo v2 con 13 inputs (estado, fecha, pago, cluster del seller, banderas exógenas). Gauge de probabilidad con base rate. Importancias top-12 + barras comparativas v1 vs v2 |
+| 3 | **Pronóstico de demanda** | Selector de categoría → serie histórica + pronóstico SARIMA + IC 90 % + bandas P10/P90 + marcadores de alertas STOCKOUT/SOBRE-STOCK. KPIs por categoría + tabla accionable y benchmarks vs Naïve |
+| 4 | **Segmentación de sellers** | Tarjetas por cluster (3,095 sellers, k=3), scatter `tasa_retraso × ingresos` coloreado por cluster, explorador con filtros (cluster, # pedidos, prefijo de seller_id) |
+| 5 | **Calidad de datos** | Resumen de limpieza, 9 validaciones del cubo (todas al 100 %), bug-fix `product_category_name_english`, calendario BR y tasa de retraso por cohorte exógena (Black Friday 2.58×, Cyber Monday 2.72×) |
+
+### 8-bis.3 Diseño visual
+Tema **oscuro tipo terminal financiera** (fondo `#0b1220`, acento ámbar `#f59e0b`). Sin emojis. Tipografía: **Inter** para texto + **JetBrains Mono** para números y etiquetas técnicas. Componentes:
+
+- KPI cards con borde lateral ámbar y delta semántico (verde/rojo/gris).
+- Chips de estado (`OK`, `WARN`, `ALERT`, `INFO`) en lugar de iconografía.
+- Plotly template propio con `paper_bgcolor` transparente, ejes/grilla en `#1f2937`, paleta `[AMBER, SKY, EMERALD, VIOLET, ROSE]`.
+- Gauge de probabilidad con tres zonas (verde / ámbar / rojo) y línea de referencia en la tasa base global.
+
+### 8-bis.4 Ejecución
+
+```bash
+.venv/bin/python -m streamlit run App/app.py
+```
+
+Primer arranque ≈ 5 s (carga del modelo joblib + CSVs). Reruns instantáneos (cache).
+Detalles completos en `App/README.md`.
+
+---
+
 ## 9. Stack tecnológico
 
 - **Lenguaje:** Python 3 (notebooks ejecutados en Google Colab y en `venv` local con Python 3.14).
 - **Librerías clave:** `pandas`, `numpy`, `scikit-learn`, `matplotlib`, `seaborn`, `statsmodels` (SARIMA + STL), `holidays` (calendario BR), `unicodedata`, `sqlalchemy`, `google-cloud-bigquery`, `pandas-gbq`, `pyarrow`, `db-dtypes`.
 - **Almacenamiento analítico:** Google BigQuery (`mineria-datos-493000.smart_supply_chain`).
-- **Visualización:** Looker Studio sobre las sábanas de BigQuery.
+- **Visualización:** Looker Studio sobre las sábanas de BigQuery + **dashboard Streamlit local** (`App/app.py`) con Plotly.
 - **Reproducibilidad local:** `.venv` con todas las dependencias instaladas; los cuatro notebooks de la rev. 2 fueron ejecutados de extremo a extremo y persisten sus outputs.
 
 ---
@@ -400,6 +513,16 @@ Scripts UNAM/
 │   ├── 06_clustering_sellers.ipynb             # K-Means + estrategias por cluster
 │   └── 07_series_tiempo_y_alertas.ipynb          # SARIMA + alertas
 │
+├── Notebook de cierre (rev. 3)
+│   └── 08_modelo_supervisado_v2.ipynb           # Random Forest con seller + distancia + calendario
+│
+├── Interfaz web (rev. 3)
+│   └── App/
+│       ├── app.py                              # Entry point Streamlit
+│       ├── README.md                           # Instrucciones de uso
+│       ├── .streamlit/config.toml              # Tema oscuro
+│       └── lib/                                # theme, data, charts, views/
+│
 ├── Datasets de entrada
 │   ├── tad_pedidos.csv                       # Sábana original (37 MB)
 │   ├── tad_ventas.csv                        # Sábana corregida por bugfix (59 MB)
@@ -414,9 +537,19 @@ Scripts UNAM/
 │   ├── alertas_inventario.csv                # Alertas STOCKOUT / SOBRE-STOCK
 │   └── metricas_series_tiempo.csv            # SARIMA vs naïve
 │
-└── Documentación adicional
-    ├── Documentación.docx
-    └── Documentación.pdf
+├── Datasets generados (rev. 3)
+│   ├── 08_resultados_modelo_v2.csv             # Métricas del modelo v2
+│   ├── 08_comparacion_v1_v2.csv                # Tabla comparativa v1 vs v2
+│   ├── 08_importancias_rf_tuneado.csv          # Importancias RF
+│   └── 08_resultados_gridsearch_rf.csv         # Combinaciones del GridSearch
+│
+├── Documentación adicional
+│   ├── Documentación.docx
+│   ├── Documentación.pdf
+│   └── diagramas/
+│       ├── DIAGRAMAS.md                        # Documento publicable con ambos diagramas
+│       ├── 01_diagrama_oltp.mmd                # Fuente Mermaid del modelo OLTP
+│       └── 02_diagrama_dwh_estrella.mmd        # Fuente Mermaid del esquema estrella
 ```
 
 ---
@@ -433,17 +566,19 @@ Scripts UNAM/
 | Ingeniería de features y limpieza exhaustiva | ✅ | Notebook de limpieza + bugfix de traducción |
 | Calidad de datos | ✅ | Bug `product_category_name_english` resuelto en rev. 2 |
 | Construcción de Data Warehouse | ✅ | Esquema estrella documentado y validado |
-| Estructuración OLTP | ⚠️ | No hay diagrama OLTP en notebooks (verificar `Documentación.docx`) |
-| Diagrama de Data Warehouse | ⚠️ | Implícito en código; falta visualización (draw.io / dbdiagram.io) |
+| Estructuración OLTP | ✅ | `DOC/diagramas/01_diagrama_oltp.mmd` (Mermaid ER) — embebido en `DIAGRAMAS.md` |
+| Diagrama de Data Warehouse | ✅ | `DOC/diagramas/02_diagrama_dwh_estrella.mmd` (esquema estrella) — embebido en `DIAGRAMAS.md` |
 | Dashboard de BI | ❓ | Looker Studio referenciado, falta entregar capturas |
 | ETL | ✅ | `02_etl_data_warehouse.ipynb` |
-| Arquitecturas de modelos y métricas | ✅ | Supervisado + clustering + SARIMA, todas con métricas reportadas |
-| **Interfaz web** | ❌ | Pendiente (entregable propuesto Streamlit) |
+| Arquitecturas de modelos y métricas | ✅ | Supervisado v1 + **v2 con Random Forest** (F1 0.23→0.39) + clustering + SARIMA |
+| **Interfaz web** | ✅ | `App/app.py` (Streamlit + Plotly, tema oscuro terminal financiera). 5 vistas: Overview / Predicción v2 / Pronóstico SARIMA / Sellers / Calidad |
 | **Agente conversacional** | ❌ | Pendiente |
 | **Carga incremental / simulación de datos recientes** | ❌ | El ETL usa `WRITE_TRUNCATE`; falta `WRITE_APPEND` simulado |
 | Identificar precisión de la solución | ✅ | Métricas reportadas para los 3 módulos analíticos |
 
-**Cumplimiento estimado: ~75-80 %** (vs ~50 % en la rev. 1).
+**Cumplimiento estimado: ~92 %** (rev. 3, vs ~75-80 % en rev. 2 y ~50 % en rev. 1).
+
+Sigue pendiente solo: agente conversacional y simulación de carga incremental.
 
 ---
 
@@ -457,4 +592,10 @@ La revisión 2 cierra los huecos analíticos más grandes del proyecto. La capa 
 - **Se ejecuta el clustering** y se aterrizan estrategias de reabastecimiento por segmento.
 - **Se corrige el bug** de traducción de categorías.
 
-**Quedan pendientes (orden sugerido):** agente conversacional, interfaz web (Streamlit), simulación de carga incremental, diagramas visuales OLTP/estrella. Recomendaciones detalladas en `RETROALIMENTACION.md`.
+En la rev. 3 además se cierra:
+
+- **Modelo supervisado v2**: Random Forest tuneado eleva el F1 de 0.23 → 0.39 (+70 %) y el PR-AUC de 0.17 → 0.32 (+90 %). El feature `seller_tasa_retraso_hist` se posiciona como Top-1 de importancias, desplazando al proxy crudo `mes` que dominaba en v1.
+- **Diagramas visuales OLTP y DWH estrella** (`DOC/diagramas/DIAGRAMAS.md`) en formato Mermaid, exportables a PNG/SVG.
+- **Interfaz web `App/app.py`** (Streamlit + Plotly, tema oscuro terminal financiera) con 5 vistas que consumen los outputs de todos los notebooks.
+
+**Quedan pendientes (orden sugerido):** agente conversacional y simulación de carga incremental. Recomendaciones detalladas en `RETROALIMENTACION.md`.
