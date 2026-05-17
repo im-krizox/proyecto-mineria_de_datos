@@ -111,7 +111,7 @@ def _bubble(who: str, text_md: str, kind: str) -> None:
     st.markdown(text_md)
 
 
-def _render_response(resp: A.AgentResponse) -> None:
+def _render_response(resp: A.AgentResponse, idx: int = 0) -> None:
     """Dibuja la respuesta del agente: texto, chips, tabla y/o gráfica."""
     with st.container():
         st.markdown(
@@ -126,7 +126,8 @@ def _render_response(resp: A.AgentResponse) -> None:
                          unsafe_allow_html=True)
 
         if resp.chart is not None:
-            st.plotly_chart(resp.chart, use_container_width=True, theme=None)
+            st.plotly_chart(resp.chart, use_container_width=True, theme=None,
+                             key=f"agente_chart_{idx}")
 
         if resp.table is not None and not resp.table.empty:
             col_config = {}
@@ -137,7 +138,8 @@ def _render_response(resp: A.AgentResponse) -> None:
                             format=cfg["format"])
             st.dataframe(resp.table, use_container_width=True,
                           hide_index=True, height=min(380, 42 + 36 * len(resp.table)),
-                          column_config=col_config)
+                          column_config=col_config,
+                          key=f"agente_table_{idx}")
 
 
 def _render_user_message(text: str) -> None:
@@ -229,12 +231,12 @@ def render():
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---- Historial ---------------------------------------------------
-    for entry in st.session_state.chat_history:
+    for i, entry in enumerate(st.session_state.chat_history):
         kind, text, resp = entry
         if kind == "user":
             _render_user_message(text)
         else:
-            _render_response(resp)
+            _render_response(resp, idx=i)
 
     # ---- Sugerencias de seguimiento (después de la última respuesta) -
     if st.session_state.last_followups:
