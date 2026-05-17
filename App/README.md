@@ -65,6 +65,57 @@ La app abrirá en `http://localhost:8501`. El primer arranque tarda ~5 s (carga 
 | Variable | Default | Propósito |
 |---|---|---|
 | `CSV_DIR` | `<repo>/CSV` | Ubicación de los CSVs producidos por los notebooks |
+| `GEMINI_API_KEY` | — | Clave de Google AI Studio para el agente conversacional (alternativa a `secrets.toml`) |
+| `GEMINI_MODEL` | `gemini-3-flash-lite` | Modelo de Gemini a usar (override) |
+| `GEMINI_DEBUG` | — | Si está definido, muestra warnings en la UI cuando falla la llamada al LLM |
+
+## Agente conversacional (vista "Asistente")
+
+El asistente combina **dos motores**:
+
+1. **Motor LLM (Gemini)** — para las preguntas escritas en el `chat_input`.
+   Inyecta como contexto un snapshot textual de los datos del proyecto
+   (KPIs, retraso por estado, top categorías, clusters, alertas, métricas
+   del modelo, factores, errores SARIMA) y responde con un JSON
+   estructurado `{text, viz, viz_hint}`. Si pide una visualización,
+   reusamos el handler equivalente del motor rule-based para adjuntar la
+   gráfica/tabla/chips.
+2. **Motor rule-based** (`lib/agent.py`) — para los **botones** de
+   sugerencias y follow-ups. Es determinista, gratis e instantáneo.
+   También sirve como **fallback** automático cuando no hay clave de
+   Gemini configurada o falla la llamada.
+
+### Configurar la clave de Gemini
+
+#### Local
+
+1. Genera una API key gratuita en https://aistudio.google.com/apikey
+2. Copia el template y pega la clave:
+
+   ```bash
+   cp App/.streamlit/secrets.toml.example App/.streamlit/secrets.toml
+   # editar App/.streamlit/secrets.toml y poner la api_key real
+   ```
+
+   El archivo `secrets.toml` está en `.gitignore` — nunca se sube al repo.
+
+#### Streamlit Community Cloud
+
+En el dashboard del deploy, abre **Settings → Secrets** y pega:
+
+```toml
+[gemini]
+api_key = "AIza..."
+model = "gemini-3-flash-lite"
+```
+
+Streamlit re-arranca la app automáticamente al guardar.
+
+#### Sin clave (modo offline)
+
+La vista detecta la ausencia de clave y conmuta a "modo respuestas rápidas":
+la caja de chat sigue funcionando, pero todas las respuestas vienen del
+motor rule-based determinista. No se rompe nada.
 
 ## Tema visual
 

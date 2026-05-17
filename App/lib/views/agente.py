@@ -1,9 +1,16 @@
-"""Vista 6 — Agente conversacional sobre los datos del negocio."""
+"""Vista 6 — Agente conversacional sobre los datos del negocio.
+
+Entrada escrita -> Gemini (via :mod:`lib.llm`), con fallback automático al
+motor rule-based si no hay API key configurada o la llamada falla.
+Botones de sugerencias / follow-ups -> motor rule-based directo
+(determinista, instantáneo, sin costo).
+"""
 from __future__ import annotations
 
 import streamlit as st
 
 from .. import agent as A
+from .. import llm as L
 from .. import theme as T
 
 
@@ -145,9 +152,17 @@ def _render_user_message(text: str) -> None:
 #  Render principal
 # ---------------------------------------------------------------------------
 
-def _handle_query(query: str) -> None:
-    """Procesa un mensaje del usuario y lo agrega al historial."""
-    resp = A.route(query)
+def _handle_query(query: str, *, use_llm: bool) -> None:
+    """Procesa un mensaje del usuario y lo agrega al historial.
+
+    ``use_llm=True`` para preguntas escritas libres (llamada a Gemini con
+    fallback rule-based). ``use_llm=False`` para los botones, que se
+    benefician de la respuesta determinista del motor rule-based.
+    """
+    if use_llm:
+        resp = L.answer_or_fallback(query, st.session_state.chat_history)
+    else:
+        resp = A.route(query)
     st.session_state.chat_history.append(("user", query, None))
     st.session_state.chat_history.append(("assistant", None, resp))
     st.session_state.last_followups = resp.followups
@@ -162,18 +177,34 @@ def render():
         st.session_state.last_followups = []
 
     # ---- Encabezado ---------------------------------------------------
+    llm_on = L.is_available()
+    meta = ("respuestas generadas con LLM (Gemini) — botones quedan en modo rápido"
+            if llm_on
+            else "modo rápido determinista — sin clave de Gemini configurada")
     st.markdown(T.section("Conversa con los datos del negocio",
                            badge="Asistente",
-                           meta="responde sobre ventas, retrasos, inventario y vendedores"),
+                           meta=meta),
                  unsafe_allow_html=True)
 
-    st.markdown(T.callout(
-        "Escribe una pregunta como si se la hicieras a un analista del equipo. "
-        "El asistente entiende preguntas sobre el negocio, los retrasos en "
-        "entregas, los tipos de vendedores, los avisos de inventario para los "
-        "próximos días y la <strong>certeza de las predicciones</strong>. "
-        "Si no sabes por dónde empezar, usa las sugerencias de abajo."
-    ), unsafe_allow_html=True)
+    if llm_on:
+        callout = (
+            "Escribe una pregunta como si se la hicieras a un analista del equipo. "
+            "El asistente entiende preguntas sobre el negocio, los retrasos en "
+            "entregas, los tipos de vendedores, los avisos de inventario para los "
+            "próximos días y la <strong>certeza de las predicciones</strong>. "
+            "Las preguntas escritas se responden con un modelo de lenguaje sobre "
+            "el snapshot de datos del proyecto; los botones dan respuestas "
+            "rápidas predefinidas."
+        )
+    else:
+        callout = (
+            "Escribe una pregunta como si se la hicieras a un analista del equipo. "
+            "El asistente entiende preguntas sobre el negocio, los retrasos en "
+            "entregas, los tipos de vendedores, los avisos de inventario para los "
+            "próximos días y la <strong>certeza de las predicciones</strong>. "
+            "Si no sabes por dónde empezar, usa las sugerencias de abajo."
+        )
+    st.markdown(T.callout(callout), unsafe_allow_html=True)
 
     # ---- Botón limpiar -----------------------------------------------
     col_clear, _ = st.columns([1, 4])
@@ -193,7 +224,7 @@ def render():
         for i, sugg in enumerate(SUGERENCIAS_INICIO):
             with cols[i % 2]:
                 if st.button(sugg, key=f"sugg_inicio_{i}"):
-                    _handle_query(sugg)
+                    _handle_query(sugg, use_llm=False)
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -214,12 +245,15 @@ def render():
         for i, sugg in enumerate(st.session_state.last_followups):
             with cols[i % len(cols)]:
                 if st.button(sugg, key=f"sugg_followup_{i}_{len(st.session_state.chat_history)}"):
-                    _handle_query(sugg)
+                    _handle_query(sugg, use_llm=False)
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---- Caja de entrada ---------------------------------------------
-    query = st.chat_input("Escribe tu pregunta…")
+    placeholder = ("Escribe tu pregunta…"
+                   if L.is_available()
+                   else "Escribe tu pregunta… (modo respuestas rápidas)")
+    query = st.chat_input(placeholder)
     if query:
-        _handle_query(query)
+        _handle_query(query, use_llm=True)
         st.rerun()

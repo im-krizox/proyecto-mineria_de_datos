@@ -1,0 +1,19 @@
+# Secrets (nunca subir claves de API ni credenciales)
+**/secrets.toml
+*.pem
+smart_supply_chain.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
