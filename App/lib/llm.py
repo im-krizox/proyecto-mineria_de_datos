@@ -145,6 +145,56 @@ def build_data_context() -> str:
                  f"({share:.1f}% del top 5) sobre {int(r['pedidos']):,} pedidos")
 
     L.append("")
+    L.append("## Mes pico de cada categoría top (categoría × mes calendario)")
+    nombres_mes = {1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",
+                    6:"junio",7:"julio",8:"agosto",9:"septiembre",
+                    10:"octubre",11:"noviembre",12:"diciembre"}
+    pico_cat = D.mes_pico_por_categoria(5)
+    for _, r in pico_cat.iterrows():
+        L.append(f"- {r['product_category_name_english']}: mejor en "
+                 f"**{nombres_mes.get(int(r['mes']), int(r['mes']))}** "
+                 f"(R$ {r['ingresos_promedio']:,.0f} promedio)")
+
+    L.append("")
+    L.append("## Top categoría dentro de los meses pico (mes × categoría)")
+    vcm = D.ventas_cat_por_mes()
+    if not vcm.empty:
+        top5_meses = (D.ventas_por_mes()
+                          .sort_values("ingresos", ascending=False)
+                          .head(5)["aniomes"].tolist())
+        for aniomes in top5_meses:
+            sub = vcm[vcm["aniomes"] == aniomes]
+            if sub.empty:
+                continue
+            top = sub.sort_values("ingresos", ascending=False).head(3)
+            partes = [
+                f"{r['product_category_name_english']} (R$ {r['ingresos']:,.0f})"
+                for _, r in top.iterrows()
+            ]
+            L.append(f"- {aniomes:%b %Y}: " + ", ".join(partes))
+
+    L.append("")
+    L.append("## Top categorías por estado del cliente (estado × categoría)")
+    tcs = D.top_cats_por_estado(5, 3)
+    if not tcs.empty:
+        for estado, grupo in tcs.groupby("customer_state", sort=False):
+            partes = [
+                f"{r['product_category_name_english']} (R$ {r['ingresos']:,.0f})"
+                for _, r in grupo.iterrows()
+            ]
+            L.append(f"- {estado}: " + " > ".join(partes))
+
+    L.append("")
+    L.append("## Distribución de tipos de vendedor por estado del vendedor")
+    cps = D.clusters_por_seller_state(6)
+    if not cps.empty:
+        for estado, grupo in cps.groupby("seller_state", sort=False):
+            total = int(grupo["n_sellers"].sum())
+            partes = [f"{r['etiqueta']}={int(r['n_sellers'])}"
+                      for _, r in grupo.iterrows()]
+            L.append(f"- {estado} ({total} sellers): " + ", ".join(partes))
+
+    L.append("")
     L.append("## Top categorías por ingresos (con su retraso)")
     for _, r in cats.head(10).iterrows():
         L.append(f"- {r['product_category_name_english']}: "

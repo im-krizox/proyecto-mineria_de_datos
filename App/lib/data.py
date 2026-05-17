@@ -187,6 +187,115 @@ def ventas_por_estado_cliente() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def ventas_cat_por_mes() -> pd.DataFrame:
+    """Ingresos por (categoría × año-mes). Base para preguntas categoría↔mes."""
+    ven = load_ventas_min()
+    if ven.empty:
+        return pd.DataFrame(columns=["aniomes", "anio", "mes",
+                                       "product_category_name_english",
+                                       "items", "ingresos"])
+    df = ven.dropna(subset=["product_category_name_english"]).copy()
+    df["aniomes"] = pd.to_datetime(
+        df["anio"].astype(int).astype(str) + "-" +
+        df["mes"].astype(int).astype(str).str.zfill(2) + "-01"
+    )
+    out = (df.groupby(["aniomes", "anio", "mes",
+                         "product_category_name_english"],
+                        as_index=False)
+              .agg(items=("order_item_id", "count"),
+                   ingresos=("price", "sum")))
+    return out
+
+
+@st.cache_data(show_spinner=False)
+def mes_pico_por_categoria(top_n: int = 5) -> pd.DataFrame:
+    """Para las top_n categorías por ingresos, mes-calendario más fuerte
+    (promedio entre años) e ingresos asociados."""
+    base = ventas_cat_por_mes()
+    if base.empty:
+        return pd.DataFrame()
+    top_cats = (base.groupby("product_category_name_english", as_index=False)
+                       .agg(ingresos_totales=("ingresos", "sum"))
+                       .sort_values("ingresos_totales", ascending=False)
+                       .head(top_n)["product_category_name_english"]
+                       .tolist())
+    sub = base[base["product_category_name_english"].isin(top_cats)]
+    cal = (sub.groupby(["product_category_name_english", "mes"], as_index=False)
+              .agg(ingresos_promedio=("ingresos", "mean")))
+    # Para cada cat: mes con mayor promedio.
+    idx = cal.groupby("product_category_name_english")["ingresos_promedio"].idxmax()
+    pico = cal.loc[idx].reset_index(drop=True)
+    pico["orden"] = pico["product_category_name_english"].map(
+        {c: i for i, c in enumerate(top_cats)})
+    return pico.sort_values("orden").drop(columns="orden")
+
+
+@st.cache_data(show_spinner=False)
+def top_cats_por_estado(top_estados: int = 5, top_cats: int = 3) -> pd.DataFrame:
+    """Top categorías por ingresos para cada estado top (del cliente).
+
+    Requiere unir ventas (categoría, ingresos, order_id) con pedidos
+    (order_id → customer_state).
+    """
+    ven = load_ventas_min()
+    ped = load_pedidos()
+    if ven.empty or ped.empty:
+        return pd.DataFrame()
+    cross = ven.merge(ped[["order_id", "customer_state"]],
+                       on="order_id", how="inner")
+    cross = cross.dropna(subset=["product_category_name_english"])
+    # Top estados por ingresos.
+    estados_top = (cross.groupby("customer_state", as_index=False)
+                          .agg(ingresos=("price", "sum"))
+                          .sort_values("ingresos", ascending=False)
+                          .head(top_estados)["customer_state"]
+                          .tolist())
+    sub = cross[cross["customer_state"].isin(estados_top)]
+    agg = (sub.groupby(["customer_state", "product_category_name_english"],
+                          as_index=False)
+              .agg(ingresos=("price", "sum")))
+    # Top N categorías por estado.
+    agg = (agg.sort_values(["customer_state", "ingresos"],
+                              ascending=[True, False])
+              .groupby("customer_state", as_index=False)
+              .head(top_cats))
+    # Ranking para presentación.
+    agg["rank"] = (agg.groupby("customer_state").cumcount() + 1)
+    agg["orden_estado"] = agg["customer_state"].map(
+        {e: i for i, e in enumerate(estados_top)})
+    return (agg.sort_values(["orden_estado", "rank"])
+                .drop(columns="orden_estado")
+                .reset_index(drop=True))
+
+
+@st.cache_data(show_spinner=False)
+def clusters_por_seller_state(top_estados: int = 6) -> pd.DataFrame:
+    """Distribución de clusters (etiquetas) por estado donde vive el vendedor."""
+    clu = load_clusters()
+    ven = load_ventas_min()
+    if clu.empty or ven.empty:
+        return pd.DataFrame()
+    sellers_state = (ven.dropna(subset=["seller_state"])
+                          .groupby("seller_id", as_index=False)["seller_state"]
+                          .agg(lambda s: s.mode().iloc[0] if not s.mode().empty
+                                else s.iloc[0]))
+    merged = clu.merge(sellers_state, on="seller_id", how="inner")
+    # Top estados por # sellers.
+    estados_top = (merged.groupby("seller_state", as_index=False)
+                            .agg(n=("seller_id", "count"))
+                            .sort_values("n", ascending=False)
+                            .head(top_estados)["seller_state"].tolist())
+    sub = merged[merged["seller_state"].isin(estados_top)]
+    out = (sub.groupby(["seller_state", "etiqueta"], as_index=False)
+              .agg(n_sellers=("seller_id", "count")))
+    out["orden"] = out["seller_state"].map(
+        {e: i for i, e in enumerate(estados_top)})
+    return (out.sort_values(["orden", "n_sellers"], ascending=[True, False])
+                .drop(columns="orden")
+                .reset_index(drop=True))
+
+
+@st.cache_data(show_spinner=False)
 def top_categorias(n: int = 12) -> pd.DataFrame:
     ven = load_ventas_min()
     out = (ven.groupby("product_category_name_english", as_index=False)

@@ -1291,6 +1291,9 @@ def route(text: str) -> AgentResponse:
     # --- Dónde se vende más / ingresos por estado -------------------------
     if es_donde and es_ventas and not es_retraso:
         return handle_ventas_por_estado(text)
+    # "qué se vende en SP" — estado específico + verbo de venta sin retraso
+    if estado and es_ventas and not es_retraso and not es_forecast:
+        return handle_ventas_por_estado(text)
 
     # --- Inventario sin categoría específica → alertas globales -----------
     # cubre "en qué categorías hay stockout/sin stock", "qué alertas hay"
