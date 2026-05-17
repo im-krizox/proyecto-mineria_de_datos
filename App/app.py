@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 
 from lib import theme as T  # noqa: E402
 from lib.views import (   # noqa: E402
-    overview, prediccion, pronostico, sellers, calidad,
+    overview, prediccion, pronostico, sellers, calidad, agente,
 )
 
 
@@ -56,6 +56,7 @@ tabs = st.tabs([
     "Pronóstico de ventas",
     "Tipos de vendedores",
     "Preparación de datos",
+    "Asistente",
 ])
 
 with tabs[0]:
@@ -68,3 +69,5 @@ with tabs[3]:
     sellers.render()
 with tabs[4]:
     calidad.render()
+with tabs[5]:
+    agente.render()
