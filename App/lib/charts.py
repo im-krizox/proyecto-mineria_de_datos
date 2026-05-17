@@ -64,6 +64,23 @@ def line_tendencia_mensual(df: pd.DataFrame) -> go.Figure:
     return _apply(fig, height=380)
 
 
+# --- Ventas por mes (estacionalidad) ---------------------------------------
+def bar_ventas_mensuales(df: pd.DataFrame) -> go.Figure:
+    """Barras de ingresos mes a mes (espera columnas `aniomes`, `ingresos`)."""
+    d = df.sort_values("aniomes").copy()
+    fig = go.Figure(go.Bar(
+        x=d["aniomes"], y=d["ingresos"],
+        marker=dict(color=T.AMBER, line=dict(width=0)),
+        text=[f"R$ {v/1e3:.0f}K" for v in d["ingresos"]],
+        textposition="outside",
+        textfont=dict(family="JetBrains Mono", color=T.TEXT_DIM, size=10),
+        hovertemplate="<b>%{x|%b %Y}</b><br>Ingresos: R$ %{y:,.0f}<extra></extra>",
+    ))
+    fig.update_xaxes(title="")
+    fig.update_yaxes(title="Ingresos (R$)")
+    return _apply(fig, height=360)
+
+
 # --- Top categorías ---------------------------------------------------------
 def bar_categorias(df: pd.DataFrame, metric: str = "ingresos") -> go.Figure:
     d = df.sort_values(metric, ascending=True).copy()

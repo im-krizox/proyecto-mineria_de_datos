@@ -373,6 +373,146 @@ def handle_top_categorias(text: str) -> AgentResponse:
     )
 
 
+_MES_NOMBRE_ES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
+}
+
+
+def handle_estacionalidad_ventas(text: str) -> AgentResponse:
+    """Responde 'qué mes/año/temporada se vendió más', con tabla y gráfica."""
+    vm = D.ventas_por_mes().copy()
+    if vm.empty:
+        return handle_fallback(text)
+    text_norm = normalize(text)
+
+    # `normalize` quita acentos, así que "año" llega como "ano".
+    quiere_anio = (("anio" in text_norm or " ano" in f" {text_norm}")
+                    and "mes" not in text_norm)
+
+    if quiere_anio:
+        anual = (vm.groupby("anio", as_index=False)
+                   .agg(pedidos=("pedidos", "sum"),
+                         items=("items", "sum"),
+                         ingresos=("ingresos", "sum")))
+        mejor = anual.loc[anual["ingresos"].idxmax()]
+        peor  = anual.loc[anual["ingresos"].idxmin()]
+        bullets = "\n".join(
+            f"- **{int(r['anio'])}** — {fmt_money(r['ingresos'])} "
+            f"({fmt_int(r['pedidos'])} pedidos)"
+            for _, r in anual.sort_values("ingresos", ascending=False).iterrows()
+        )
+        text_out = (
+            f"El año más fuerte fue **{int(mejor['anio'])}** con "
+            f"{fmt_money(mejor['ingresos'])} en ventas y "
+            f"{fmt_int(mejor['pedidos'])} pedidos. El más bajo fue "
+            f"**{int(peor['anio'])}** con {fmt_money(peor['ingresos'])}.\n\n"
+            f"Detalle por año:\n\n{bullets}\n\n"
+            "Nota: el dataset solo cubre fragmentos de 2016 y septiembre 2018, "
+            "por lo que **2017** es el año con cobertura completa."
+        )
+        return AgentResponse(
+            intent="ventas_por_anio",
+            text=text_out,
+            chips=[(f"Mejor: {int(mejor['anio'])}", "ok"),
+                    (f"Peor: {int(peor['anio'])}", "warn")],
+            followups=[
+                "¿Qué mes se vendió más?",
+                "¿Qué categorías generan más ingresos?",
+                "¿Cómo va el negocio?",
+            ],
+        )
+
+    # Default: respuesta mes a mes.
+    mejor = vm.loc[vm["ingresos"].idxmax()]
+    peor  = vm.loc[vm["ingresos"].idxmin()]
+    vmc = D.ventas_por_mes_calendario()
+    top_mes_cal = vmc.iloc[0] if not vmc.empty else None
+    top5 = vm.sort_values("ingresos", ascending=False).head(5)
+    bullets = "\n".join(
+        f"- **{r['aniomes']:%b %Y}** — {fmt_money(r['ingresos'])} "
+        f"({fmt_int(r['pedidos'])} pedidos)"
+        for _, r in top5.iterrows()
+    )
+    text_out = (
+        f"El mes con **más ventas** fue **{mejor['aniomes']:%B %Y}** con "
+        f"{fmt_money(mejor['ingresos'])} en ingresos sobre "
+        f"{fmt_int(mejor['pedidos'])} pedidos. El más bajo fue "
+        f"**{peor['aniomes']:%B %Y}** ({fmt_money(peor['ingresos'])}).\n\n"
+        "**Top 5 meses por ventas:**\n\n" + bullets
+    )
+    if top_mes_cal is not None:
+        nombre = _MES_NOMBRE_ES.get(int(top_mes_cal["mes"]), str(int(top_mes_cal["mes"])))
+        text_out += (
+            f"\n\n**Estacionalidad:** en promedio entre años, **{nombre}** "
+            f"es el mes más fuerte ({fmt_money(top_mes_cal['ingresos_promedio'])} "
+            "de ingresos promedio)."
+        )
+    chips = [
+        (f"Pico: {mejor['aniomes']:%b %Y}", "ok"),
+        (f"Valle: {peor['aniomes']:%b %Y}", "warn"),
+    ]
+    return AgentResponse(
+        intent="estacionalidad_ventas",
+        text=text_out,
+        chips=chips,
+        chart=C.bar_ventas_mensuales(vm),
+        followups=[
+            "¿Qué año se vendió más?",
+            "¿Qué categorías generan más ingresos?",
+            "¿Los días de oferta afectan los retrasos?",
+        ],
+    )
+
+
+def handle_ventas_por_estado(text: str) -> AgentResponse:
+    """Responde 'dónde se vende más' / 'qué estados compran más'."""
+    df = D.ventas_por_estado_cliente()
+    if df.empty:
+        return handle_fallback(text)
+    estado = detect_state_raw(text)
+    if estado and (df["customer_state"] == estado).any():
+        row = df[df["customer_state"] == estado].iloc[0]
+        rank = (df.sort_values("ingresos", ascending=False)
+                  .reset_index(drop=True))
+        pos = rank.index[rank["customer_state"] == estado].tolist()[0] + 1
+        text_out = (
+            f"En **{estado}** se vendieron {fmt_money(row['ingresos'])} "
+            f"sobre {fmt_int(row['pedidos'])} pedidos. Ocupa el lugar "
+            f"**#{pos} de {len(rank)}** estados por ingresos."
+        )
+        return AgentResponse(
+            intent="ventas_por_estado",
+            text=text_out,
+            chips=[(f"{estado}: {fmt_money(row['ingresos'])}", "info")],
+            followups=[
+                f"¿Cómo entrega {estado}?",
+                "¿Cuáles son los top estados en ventas?",
+            ],
+        )
+    top = df.head(5)
+    bullets = "\n".join(
+        f"- **{r['customer_state']}** — {fmt_money(r['ingresos'])} "
+        f"({fmt_int(r['pedidos'])} pedidos)"
+        for _, r in top.iterrows()
+    )
+    text_out = (
+        "Los **5 estados que más compran** son:\n\n" + bullets + "\n\n"
+        f"**SP** concentra cerca del {df.iloc[0]['ingresos']/df['ingresos'].sum()*100:.0f}% "
+        "de los ingresos del país."
+    )
+    return AgentResponse(
+        intent="ventas_por_estado",
+        text=text_out,
+        followups=[
+            "¿Qué estados entregan peor?",
+            "¿Qué categorías se venden más?",
+            "¿Qué mes se vendió más?",
+        ],
+    )
+
+
 def handle_efecto_fechas(_text: str) -> AgentResponse:
     ped = D.load_pedidos()
     media = ped["is_late_delivery"].mean()
@@ -856,13 +996,24 @@ def handle_cuantos_vendedores(_text: str) -> AgentResponse:
     )
 
 
-def handle_fallback(_text: str) -> AgentResponse:
-    return AgentResponse(
-        intent="fallback",
-        text=(
+def handle_fallback(text: str) -> AgentResponse:
+    q = (text or "").strip()
+    if q:
+        text_out = (
+            f"No encontré una pregunta predefinida que matchee con "
+            f"\"{q}\". Las áreas que puedo cubrir son: **ventas y "
+            "estacionalidad**, **retrasos en entregas**, **tipos de "
+            "vendedores**, **avisos de inventario** y **certeza del "
+            "sistema**. Prueba reformular o elige una sugerencia:"
+        )
+    else:
+        text_out = (
             "No estoy seguro de haber entendido la pregunta. Puedes intentar "
             "reformularla o usar una de estas sugerencias:"
-        ),
+        )
+    return AgentResponse(
+        intent="fallback",
+        text=text_out,
         followups=SUGERENCIAS_BASE,
     )
 
@@ -950,7 +1101,44 @@ _RULES: list[_IntentRule] = [
                 keywords=["categoria", "categorias", "categoría", "categorías",
                           "que se vende", "qué se vende", "mas vendidos",
                           "más vendidos", "top productos", "ingresos por categoria",
-                          "ingresos por categoría"]),
+                          "ingresos por categoría", "productos que mas",
+                          "productos que más", "que productos", "qué productos"]),
+
+    # Estacionalidad / temporal -------------------------------------------
+    _IntentRule(handle_estacionalidad_ventas,
+                keywords=["que mes", "qué mes", "cual mes", "cuál mes",
+                          "mejor mes", "peor mes", "mes con mas",
+                          "mes con más", "mes con mayor", "mes con menor",
+                          "temporada", "estacionalidad", "epoca del año",
+                          "época del año", "cuando se vende", "cuándo se vende",
+                          "que año", "qué año", "cual año", "cuál año",
+                          "mejor año", "peor año", "por año", "anual",
+                          "mes a mes", "evolucion de ventas",
+                          "evolución de ventas", "tendencia de ventas",
+                          "tendencia mensual", "evolucion mensual",
+                          "evolución mensual", "ventas mensuales",
+                          "ventas por mes", "ingresos mensuales",
+                          "ingresos por mes",
+                          "pico de ventas", "valle de ventas"],
+                must_have=["mes", "año", "anio", "temporad", "estacional",
+                            "epoca", "época", "tendencia", "evolucion",
+                            "evolución", "anual", "pico", "valle",
+                            "mensual"],
+                boost=2),
+
+    # Ventas por estado del cliente ---------------------------------------
+    _IntentRule(handle_ventas_por_estado,
+                keywords=["donde se vende", "dónde se vende",
+                          "donde vendemos", "dónde vendemos",
+                          "que estado compra", "qué estado compra",
+                          "estados que mas compran", "estados que más compran",
+                          "estados compran", "estados que compran",
+                          "estados con mas ventas", "estados con más ventas",
+                          "ingresos por estado", "ventas por estado",
+                          "estado con mas ventas", "estado con más ventas",
+                          "que estado vende", "qué estado vende",
+                          "que estados venden", "qué estados venden"],
+                boost=1),
 
     # Efecto fechas --------------------------------------------------------
     _IntentRule(handle_efecto_fechas,
@@ -997,7 +1185,10 @@ _RULES: list[_IntentRule] = [
                 keywords=["alerta", "alertas", "aviso", "avisos",
                           "stockout", "quiebre de stock", "sobre stock",
                           "sobre-stock", "sobre estoque", "sin producto",
-                          "sin inventario", "se acaba", "exceso de inventario"]),
+                          "sin inventario", "se acaba", "exceso de inventario",
+                          "sin stock", "quedarnos sin", "riesgo de quedarnos",
+                          "stock", "inventario"],
+                boost=1),
     _IntentRule(handle_pronostico_categoria,
                 keywords=["pronostico", "pronóstico", "prediccion de venta",
                           "predicción de venta", "que se va a vender",
@@ -1017,6 +1208,17 @@ def _score(text_norm: str, rule: _IntentRule) -> int:
 
 
 # Vocabularios temáticos para el pre-router con entidades
+_VOC_TEMPORAL = ["mes", "meses", "anio", "año", "anios", "años",
+                  "temporada", "estacional", "estacionalidad",
+                  "epoca", "época", "trimestre", "semestre",
+                  "cuando", "cuándo"]
+_VOC_VENTAS = ["vent", "vend", "ingreso", "factur", "compra",
+                "gmv", "demanda"]
+_VOC_DONDE = ["donde", "dónde", "en que estado", "en qué estado",
+              "que estado", "qué estado", "que region", "qué región",
+              "que estados", "qué estados", "estados que",
+              "estados compran", "estados venden", "estado vende",
+              "estado compra"]
 _VOC_CALIDAD = ["certero", "preciso", "precision", "exact", "que tan bueno",
                 "qué tan bueno", "calidad", "confiable", "f1", "roc", "auc",
                 "smape", "error", "metric"]
@@ -1066,12 +1268,35 @@ def route(text: str) -> AgentResponse:
     es_modelo      = _has_any(text_norm, _VOC_MODELO)
     es_pregunta_estado = _has_any(text_norm, _VOC_PREGUNTA_ESTADO)
     es_estrategia  = _has_any(text_norm, _VOC_ESTRATEGIA)
+    es_temporal    = _has_any(text_norm, _VOC_TEMPORAL)
+    es_ventas      = _has_any(text_norm, _VOC_VENTAS)
+    es_donde       = _has_any(text_norm, _VOC_DONDE)
 
     # --- Calidad/certeza del sistema --------------------------------------
     if es_calidad and es_forecast:
         return handle_precision_pronostico(text)
     if es_calidad and (es_retraso or es_modelo):
         return handle_precision_retraso(text)
+
+    # --- Estacionalidad / preguntas temporales sobre ventas --------------
+    # "qué mes se vende más", "mejor año", "cuándo facturamos más"
+    if es_temporal and es_ventas and not es_retraso and not es_forecast \
+            and not es_inventario and categoria is None:
+        return handle_estacionalidad_ventas(text)
+    # "qué mes fue el peor en retrasos" → retraso global ya cubre
+    if es_temporal and es_retraso and not es_forecast and not categoria \
+            and not estado:
+        return handle_retraso_global(text)
+
+    # --- Dónde se vende más / ingresos por estado -------------------------
+    if es_donde and es_ventas and not es_retraso:
+        return handle_ventas_por_estado(text)
+
+    # --- Inventario sin categoría específica → alertas globales -----------
+    # cubre "en qué categorías hay stockout/sin stock", "qué alertas hay"
+    if es_inventario and categoria is None and not es_forecast \
+            and not es_retraso:
+        return handle_alertas_categoria(text)
 
     # --- Categoría mencionada explícitamente ------------------------------
     if categoria:

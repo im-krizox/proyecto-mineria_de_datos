@@ -50,6 +50,31 @@ _CHAT_CSS = f"""
 .chat-bubble ul {{ margin: 6px 0 6px 18px; padding: 0; }}
 .chat-bubble li {{ margin: 3px 0; }}
 .chip-row {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px 0; }}
+.fuente-tag {{
+    display: inline-block;
+    margin-top: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    border: 1px solid {T.BORDER};
+    color: {T.TEXT_MUTED};
+}}
+.fuente-tag.llm {{
+    color: {T.SKY};
+    border-color: rgba(56,189,248,0.45);
+    background: rgba(56,189,248,0.08);
+}}
+.fuente-tag.rules {{
+    color: {T.AMBER};
+    border-color: rgba(245,158,11,0.45);
+    background: rgba(245,158,11,0.06);
+}}
+.fuente-tag.error {{
+    color: #f87171;
+    border-color: rgba(248,113,113,0.55);
+    background: rgba(248,113,113,0.08);
+}}
 .followup-label {{
     color: {T.TEXT_MUTED};
     font-family: 'JetBrains Mono', monospace;
@@ -111,6 +136,18 @@ def _bubble(who: str, text_md: str, kind: str) -> None:
     st.markdown(text_md)
 
 
+def _fuente_tag(resp: A.AgentResponse) -> str:
+    """Etiqueta visual que dice si la respuesta vino de Gemini o de las reglas."""
+    intent = (resp.intent or "").lower()
+    if intent.startswith("llm:"):
+        if intent.endswith(":viz_error") or ":unknown:" in intent:
+            return '<span class="fuente-tag error">Gemini · viz fallida</span>'
+        return '<span class="fuente-tag llm">Respuesta generada por Gemini</span>'
+    if intent == "fallback":
+        return '<span class="fuente-tag error">Modo rápido · sin match</span>'
+    return '<span class="fuente-tag rules">Modo rápido · motor de reglas</span>'
+
+
 def _render_response(resp: A.AgentResponse, idx: int = 0) -> None:
     """Dibuja la respuesta del agente: texto, chips, tabla y/o gráfica."""
     with st.container():
@@ -141,6 +178,8 @@ def _render_response(resp: A.AgentResponse, idx: int = 0) -> None:
                           column_config=col_config,
                           key=f"agente_table_{idx}")
 
+        st.markdown(_fuente_tag(resp), unsafe_allow_html=True)
+
 
 def _render_user_message(text: str) -> None:
     st.markdown(
@@ -164,6 +203,7 @@ def _handle_query(query: str, *, use_llm: bool) -> None:
     if use_llm:
         resp = L.answer_or_fallback(query, st.session_state.chat_history)
     else:
+        # Botones: ruta determinista, sin tocar el estado de error de Gemini.
         resp = A.route(query)
     st.session_state.chat_history.append(("user", query, None))
     st.session_state.chat_history.append(("assistant", None, resp))
@@ -207,6 +247,14 @@ def render():
             "Si no sabes por dónde empezar, usa las sugerencias de abajo."
         )
     st.markdown(T.callout(callout), unsafe_allow_html=True)
+
+    # ---- Diagnóstico de Gemini --------------------------------------
+    last_err = st.session_state.get("_llm_last_error")
+    if last_err and L.is_available():
+        st.warning(
+            f"La última pregunta no la respondió Gemini · motivo: {last_err}",
+            icon=":material/warning:",
+        )
 
     # ---- Botón limpiar -----------------------------------------------
     col_clear, _ = st.columns([1, 4])

@@ -105,6 +105,46 @@ def build_data_context() -> str:
                  f"{int(r['pedidos']):,} pedidos")
 
     L.append("")
+    L.append("## Ventas por mes (aniomes)")
+    vm = D.ventas_por_mes()
+    if not vm.empty:
+        top_m = vm.sort_values("ingresos", ascending=False).head(5)
+        bot_m = vm.sort_values("ingresos", ascending=True).head(3)
+        for _, r in top_m.iterrows():
+            L.append(f"- {r['aniomes']:%b %Y}: R$ {r['ingresos']:,.0f} "
+                     f"sobre {int(r['pedidos']):,} pedidos")
+        L.append(f"Mes pico: {top_m.iloc[0]['aniomes']:%B %Y}")
+        L.append(f"Meses más bajos: " + ", ".join(
+            f"{r['aniomes']:%b %Y}" for _, r in bot_m.iterrows()))
+        vmc = D.ventas_por_mes_calendario()
+        if not vmc.empty:
+            L.append("## Estacionalidad — promedio por número de mes (1-12)")
+            nombres_es = {1:"enero",2:"febrero",3:"marzo",4:"abril",5:"mayo",
+                            6:"junio",7:"julio",8:"agosto",9:"septiembre",
+                            10:"octubre",11:"noviembre",12:"diciembre"}
+            for _, r in vmc.head(6).iterrows():
+                L.append(f"- {nombres_es.get(int(r['mes']), int(r['mes']))}: "
+                         f"R$ {r['ingresos_promedio']:,.0f} promedio")
+        anual = (vm.groupby("anio", as_index=False)
+                   .agg(ingresos=("ingresos", "sum"),
+                         pedidos=("pedidos", "sum")))
+        L.append("## Ventas por año")
+        for _, r in anual.sort_values("anio").iterrows():
+            L.append(f"- {int(r['anio'])}: R$ {r['ingresos']:,.0f} "
+                     f"sobre {int(r['pedidos']):,} pedidos")
+        L.append("Nota: 2016 y 2018 son fragmentos; 2017 es el año con "
+                 "cobertura completa.")
+
+    L.append("")
+    L.append("## Ventas por estado del cliente (top 5)")
+    ve = D.ventas_por_estado_cliente().head(5)
+    total = ve["ingresos"].sum() if not ve.empty else 0
+    for _, r in ve.iterrows():
+        share = (r["ingresos"] / total * 100) if total else 0
+        L.append(f"- {r['customer_state']}: R$ {r['ingresos']:,.0f} "
+                 f"({share:.1f}% del top 5) sobre {int(r['pedidos']):,} pedidos")
+
+    L.append("")
     L.append("## Top categorías por ingresos (con su retraso)")
     for _, r in cats.head(10).iterrows():
         L.append(f"- {r['product_category_name_english']}: "
@@ -207,6 +247,8 @@ VIZ_CATALOG: dict[str, str] = {
     "retraso_por_estado":     "barras del retraso por estado (úsalo cuando hablen de un estado o ranking de estados)",
     "mejores_estados":        "lista de los estados con mejor cumplimiento",
     "top_categorias":         "barras de ingresos por categoría",
+    "estacionalidad_ventas":  "ventas mensuales con pico y valle (usa cuando pregunten qué mes/año se vendió más, estacionalidad o tendencia de ventas)",
+    "ventas_por_estado":      "ranking de estados por ingresos del cliente (úsalo cuando pregunten dónde se vende más, qué estado compra más)",
     "efecto_fechas":          "tasa de retraso por tipo de día (feriado, oferta, etc.)",
     "tipos_vendedores":       "resumen de los 3 grupos de vendedores",
     "recomendacion_cluster":  "detalle y estrategia para UN grupo de vendedores (mencionar el cluster en viz_hint)",
@@ -229,6 +271,8 @@ _INTENT_HANDLERS = {
     "retraso_por_estado":     A.handle_retraso_por_estado,
     "mejores_estados":        A.handle_mejores_estados,
     "top_categorias":         A.handle_top_categorias,
+    "estacionalidad_ventas":  A.handle_estacionalidad_ventas,
+    "ventas_por_estado":      A.handle_ventas_por_estado,
     "efecto_fechas":          A.handle_efecto_fechas,
     "tipos_vendedores":       A.handle_tipos_vendedores,
     "recomendacion_cluster":  A.handle_recomendacion_cluster,
@@ -368,6 +412,14 @@ def _attach_visualization(viz: Optional[str],
     )
 
 
+def _record_error(reason: str) -> None:
+    """Guarda el último motivo de fallback en session_state para mostrarlo en UI."""
+    try:
+        st.session_state["_llm_last_error"] = reason
+    except Exception:
+        pass
+
+
 def answer(query: str, history: list) -> Optional[A.AgentResponse]:
     """Llama a Gemini y devuelve una :class:`AgentResponse`, o ``None`` si falla.
 
@@ -376,13 +428,13 @@ def answer(query: str, history: list) -> Optional[A.AgentResponse]:
     """
     api_key = get_api_key()
     if not api_key:
+        _record_error("sin api key configurada (st.secrets['gemini']['api_key'] o GEMINI_API_KEY)")
         return None
     try:
         from google import genai
         from google.genai import types
     except ImportError:
-        if os.environ.get("GEMINI_DEBUG"):
-            st.warning("[LLM] paquete `google-genai` no está instalado.")
+        _record_error("paquete `google-genai` no está instalado en el entorno")
         return None
 
     try:
@@ -400,16 +452,25 @@ def answer(query: str, history: list) -> Optional[A.AgentResponse]:
         )
         raw = (getattr(response, "text", "") or "").strip()
         if not raw:
+            _record_error("respuesta vacía del modelo")
             return None
         payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        _record_error(f"JSON inválido en la respuesta del modelo: {exc}")
+        return None
     except Exception as exc:
-        if os.environ.get("GEMINI_DEBUG"):
-            st.warning(f"[LLM] fallo: {exc}")
+        _record_error(f"fallo en la llamada a Gemini ({type(exc).__name__}): {exc}")
         return None
 
     text = (payload.get("text") or "").strip()
     if not text:
+        _record_error("la respuesta del modelo no incluyó campo `text` no vacío")
         return None
+    # Limpia el registro de error cuando esta llamada SÍ funcionó.
+    try:
+        st.session_state.pop("_llm_last_error", None)
+    except Exception:
+        pass
     viz = payload.get("viz")
     if isinstance(viz, str) and viz.lower() in {"null", "none", ""}:
         viz = None

@@ -134,6 +134,59 @@ def retraso_por_mes() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def ventas_por_mes() -> pd.DataFrame:
+    """Agrega ventas mensuales: pedidos, items, ingresos y ticket promedio."""
+    ven = load_ventas_min()
+    if ven.empty:
+        return pd.DataFrame(columns=["aniomes", "anio", "mes", "items",
+                                       "pedidos", "ingresos", "ticket_promedio"])
+    df = ven.copy()
+    df["aniomes"] = pd.to_datetime(
+        df["anio"].astype(int).astype(str) + "-" +
+        df["mes"].astype(int).astype(str).str.zfill(2) + "-01"
+    )
+    out = (df.groupby(["aniomes", "anio", "mes"], as_index=False)
+              .agg(items=("order_item_id", "count"),
+                   pedidos=("order_id", "nunique"),
+                   ingresos=("price", "sum")))
+    out["ticket_promedio"] = out["ingresos"] / out["pedidos"].clip(lower=1)
+    return out.sort_values("aniomes")
+
+
+@st.cache_data(show_spinner=False)
+def ventas_por_mes_calendario() -> pd.DataFrame:
+    """Promedio de ingresos por número de mes (1-12), sumando todos los años."""
+    vm = ventas_por_mes()
+    if vm.empty:
+        return pd.DataFrame(columns=["mes", "ingresos_promedio",
+                                       "pedidos_promedio", "n_anios"])
+    out = (vm.groupby("mes", as_index=False)
+              .agg(ingresos_promedio=("ingresos", "mean"),
+                   pedidos_promedio=("pedidos", "mean"),
+                   n_anios=("anio", "nunique")))
+    return out.sort_values("ingresos_promedio", ascending=False)
+
+
+@st.cache_data(show_spinner=False)
+def ventas_por_estado_cliente() -> pd.DataFrame:
+    """Ingresos por estado del cliente (a nivel pedido). Útil para 'dónde se vende más'."""
+    ped = load_pedidos()
+    if ped.empty:
+        return pd.DataFrame(columns=["customer_state", "pedidos", "ingresos"])
+    if "payment_value" in ped.columns:
+        out = ped.groupby("customer_state", as_index=False).agg(
+            pedidos=("order_id", "count"),
+            ingresos=("payment_value", "sum"),
+        )
+    else:
+        out = ped.groupby("customer_state", as_index=False).agg(
+            pedidos=("order_id", "count"),
+        )
+        out["ingresos"] = 0.0
+    return out.sort_values("ingresos", ascending=False)
+
+
+@st.cache_data(show_spinner=False)
 def top_categorias(n: int = 12) -> pd.DataFrame:
     ven = load_ventas_min()
     out = (ven.groupby("product_category_name_english", as_index=False)
