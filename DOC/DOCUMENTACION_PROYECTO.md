@@ -2,7 +2,7 @@
 
 **Materia:** Minería de Datos · **Grupo 2805**
 **Profesor:** M. en IA Oscar Daniel Acosta González
-**Fecha de la versión:** 15 de mayo de 2026 (rev. 3 — refactor de cierre: renames con prefijo `NN_`, split del ETL, preámbulo unificado del EDA, integridad `pago_key` a 100%, paths via env)
+**Fecha de la versión:** 18 de mayo de 2026 (rev. 4 — pipeline local por etapas, corrección de categorías integrada al ETL, BigQuery desactivado por defecto y documentación consolidada)
 
 ---
 
@@ -11,22 +11,22 @@
 El proyecto construye un flujo *end-to-end* sobre el dataset público **Olist (Brazilian E-Commerce)** con el objetivo de soportar decisiones de la cadena de suministro de la empresa ficticia *Nexus Supply*. La solución entregada cubre:
 
 1. **Limpieza** de las nueve tablas crudas de Olist (≈1.4 M de filas en total).
-2. **ETL** que produce un esquema estrella (dimensiones + tablas de hechos) y dos tablas planas (*sábanas*) `tad_pedidos` y `tad_ventas`.
-3. **Carga** de las tablas planas en **BigQuery** (proyecto `mineria-datos-493000`, dataset `smart_supply_chain`) para alimentar **Looker Studio**.
+2. **ETL local** que produce un esquema estrella OLAP (dimensiones + tablas de hechos) y dos tablas planas (*sabanas*) `tad_pedidos` y `tad_ventas`.
+3. **Carga opcional** de las tablas planas en **BigQuery** (proyecto `mineria-datos-493000`, dataset `smart_supply_chain`) para alimentar **Looker Studio** como dashboard BI descriptivo/OLAP.
 4. **EDA y modelado supervisado** para la predicción binaria de retraso de entrega (`is_late_delivery`).
-5. **Bug fix** de la traducción de categorías PT→EN, perdida durante el ETL original.
+5. **Bug fix integrado al ETL** de la traduccion de categorias PT->EN, evitando que `product_category_name_english` llegue nula a las sabanas.
 6. **Enriquecimiento exógeno** con calendario brasileño (feriados nacionales + Carnaval + fechas comerciales clave).
 7. **Segmentación no supervisada** (K-Means) de los 3,095 sellers en clusters operativos con estrategia de reabastecimiento diferenciada.
 8. **Modelado de series de tiempo** (SARIMA) sobre la demanda diaria por categoría, con sistema de **alertas tempranas de stockout / sobre-stock**.
 
-El proyecto se entrega en ocho notebooks y los archivos de documentación de `DOC/` (incluyendo los diagramas OLTP y de DWH en `DOC/diagramas/`).
+El proyecto se entrega en ocho notebooks, una aplicacion Streamlit con dashboard y agente conversacional, y esta documentacion unica centralizada en `DOC/DOCUMENTACION_PROYECTO.md`.
 
 | Notebook | Propósito | Celdas / Estado |
 |---|---|---|
 | `01_limpieza_datos_olist.ipynb` | Limpieza individual de las 9 tablas Olist | 84 |
-| `02_etl_data_warehouse.ipynb` | Construcción del Data Warehouse + carga a BigQuery | 54 |
+| `02_etl_data_warehouse.ipynb` | Construccion local del Data Warehouse/OLAP + carga opcional a BigQuery | Ejecutado |
 | `05_analisis_exploratorio_modelado.ipynb` | EDA, modelado supervisado v1 e hiperparametrización | 114 |
-| `03_correccion_traduccion_categorias.ipynb` | Re-poblar `product_category_name_english` (rev. 2) | Ejecutado ✓ |
+| `03_correccion_traduccion_categorias.ipynb` | Notebook historico del bug fix; la logica quedo integrada al ETL del notebook 02 | Ejecutado |
 | `04_enriquecimiento_calendario_brasil.ipynb` | Calendario BR + banderas exógenas (rev. 2) | Ejecutado ✓ |
 | `06_clustering_sellers.ipynb` | K-Means + perfilado + estrategias (rev. 2) | Ejecutado ✓ |
 | `07_series_tiempo_y_alertas.ipynb` | SARIMA + sistema de alertas (rev. 2) | Ejecutado ✓ |
@@ -52,7 +52,7 @@ El proyecto se entrega en ocho notebooks y los archivos de documentación de `DO
 
 ### 2.2 Fuentes exógenas (rev. 2)
 
-El documento `INSTRUCCIONES.md` exige enriquecer el dataset principal con **al menos una fuente exógena**. En la revisión 2 del proyecto se incorpora el **calendario brasileño** vía la librería `holidays` y reglas calendáricas (Carnaval y fechas comerciales).
+El enunciado del proyecto exige enriquecer el dataset principal con **al menos una fuente exógena**. En la revisión 2 del proyecto se incorpora el **calendario brasileño** vía la librería `holidays` y reglas calendáricas (Carnaval y fechas comerciales).
 
 **Calendario consolidado:** 1,096 días entre 2016-01-01 y 2018-12-31 (cubre el 100 % de los pedidos).
 
@@ -173,13 +173,252 @@ El notebook ejecuta una **batería de validación** sólida:
 | Suma de `freight_value` items vs fact_ventas | $2,251,909.54 = $2,251,909.54 ✓ |
 | Suma de `payment_value` (sólo pedidos con items) | $15,846,280.17 = $15,846,280.17 ✓ |
 
-### 4.4 Carga a BigQuery
+### 4.4 Salidas locales y carga opcional a BigQuery
 
-Las dos sábanas se suben con `bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", autodetect=True)`:
-- `mineria-datos-493000.smart_supply_chain.tad_pedidos` — 99,441 filas × 42 columnas
-- `mineria-datos-493000.smart_supply_chain.tad_ventas` — 112,650 filas × 55 columnas
+El notebook 02 lee exclusivamente desde `csv/csv_limpios/` y genera dos grupos de salidas:
 
-> Las credenciales se leen de `smart_supply_chain.json` (no incluido en el repo). Ruta configurable vía la variable de entorno `SSC_CREDENTIALS`; default = `smart_supply_chain.json` en CWD. Auth contra GCP via Application Default Credentials (`gcloud auth application-default login` o `GOOGLE_APPLICATION_CREDENTIALS`).
+| Tipo | Carpeta | Archivos |
+|---|---|---|
+| Sabanas analiticas | `csv/` | `02_tad_pedidos.csv`, `02_tad_ventas.csv` |
+| Cubos, dimensiones y hechos | `csv/cubos/` | `02_dim_tiempo.csv`, `02_dim_cliente.csv`, `02_dim_geografia_cliente.csv`, `02_dim_producto.csv`, `02_dim_vendedor.csv`, `02_dim_pago.csv`, `02_fact_ventas.csv`, `02_fact_pedidos.csv` |
+
+La logica del notebook 03 se ejecuta ahora **antes** de generar dimensiones, hechos y sabanas. Por eso `product_category_name_english` queda corregida desde el nacimiento de `dim_producto` y `tad_ventas`, sin reescribir la sabana despues.
+
+La carga a BigQuery esta separada y desactivada por defecto con:
+
+```python
+SUBIR_A_BIGQUERY = False
+```
+
+Cuando se activa manualmente, las dos sabanas se suben con `bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", autodetect=True)`:
+- `mineria-datos-493000.smart_supply_chain.tad_pedidos` - 99,441 filas x 42 columnas
+- `mineria-datos-493000.smart_supply_chain.tad_ventas` - 112,650 filas x 55 columnas
+
+Las credenciales no se versionan. El archivo local `smart_supply_chain.json` contiene configuracion de proyecto/dataset y esta ignorado por Git; la autenticacion se realiza con Application Default Credentials o login local por navegador.
+
+**Alcance de Looker Studio:** se entrega como dashboard BI tradicional de la capa descriptiva/OLAP sobre BigQuery. No contiene todo el modelado avanzado; ese alcance vive en Streamlit, donde se integran prediccion de retraso, pronostico SARIMA, alertas, segmentacion, calidad y agente conversacional.
+
+---
+
+### 4.5 Diagramas OLTP y OLAP/DWH
+
+El proyecto documenta tanto el modelo transaccional original (**OLTP**) como el modelo analitico construido por el ETL (**OLAP / Data Warehouse en estrella**).
+
+#### 4.5.1 OLTP - Modelo transaccional Olist
+
+```mermaid
+%% Diagrama OLTP — Modelo transaccional Olist (Brazilian E-Commerce)
+%% 9 tablas crudas tal como llegan de la fuente.
+%% Renderizar con: https://mermaid.live  o VSCode + extensión "Markdown Preview Mermaid Support".
+
+erDiagram
+    olist_customers_dataset {
+        string customer_id PK
+        string customer_unique_id
+        string customer_zip_code_prefix FK
+        string customer_city
+        string customer_state
+    }
+
+    olist_orders_dataset {
+        string order_id PK
+        string customer_id FK
+        string order_status
+        datetime order_purchase_timestamp
+        datetime order_approved_at
+        datetime order_delivered_carrier_date
+        datetime order_delivered_customer_date
+        datetime order_estimated_delivery_date
+    }
+
+    olist_order_items_dataset {
+        string order_id PK_FK
+        int order_item_id PK
+        string product_id FK
+        string seller_id FK
+        datetime shipping_limit_date
+        float price
+        float freight_value
+    }
+
+    olist_order_payments_dataset {
+        string order_id PK_FK
+        int payment_sequential PK
+        string payment_type
+        int payment_installments
+        float payment_value
+    }
+
+    olist_order_reviews_dataset {
+        string review_id PK
+        string order_id FK
+        int review_score
+        string review_comment_title
+        string review_comment_message
+        datetime review_creation_date
+        datetime review_answer_timestamp
+    }
+
+    olist_products_dataset {
+        string product_id PK
+        string product_category_name FK
+        int product_name_lenght
+        int product_description_lenght
+        int product_photos_qty
+        float product_weight_g
+        float product_length_cm
+        float product_height_cm
+        float product_width_cm
+    }
+
+    olist_sellers_dataset {
+        string seller_id PK
+        string seller_zip_code_prefix FK
+        string seller_city
+        string seller_state
+    }
+
+    olist_geolocation_dataset {
+        string geolocation_zip_code_prefix PK
+        float geolocation_lat
+        float geolocation_lng
+        string geolocation_city
+        string geolocation_state
+    }
+
+    product_category_name_translation {
+        string product_category_name PK
+        string product_category_name_english
+    }
+
+    olist_customers_dataset ||--o{ olist_orders_dataset : "realiza"
+    olist_orders_dataset ||--|{ olist_order_items_dataset : "contiene"
+    olist_orders_dataset ||--o{ olist_order_payments_dataset : "se_paga_con"
+    olist_orders_dataset ||--o{ olist_order_reviews_dataset : "recibe"
+    olist_products_dataset ||--o{ olist_order_items_dataset : "es_vendido_en"
+    olist_sellers_dataset ||--o{ olist_order_items_dataset : "vende"
+    product_category_name_translation ||--o{ olist_products_dataset : "traduce"
+    olist_geolocation_dataset ||--o{ olist_customers_dataset : "ubica_cliente"
+    olist_geolocation_dataset ||--o{ olist_sellers_dataset : "ubica_seller"
+```
+
+#### 4.5.2 OLAP / DWH - Esquema estrella
+
+```mermaid
+%% Diagrama Data Warehouse — Esquema estrella `smart_supply_chain`
+%% Construido por `02_etl_data_warehouse.ipynb`.
+%% Las dimensiones rodean las dos tablas de hechos.
+%% Renderizar con: https://mermaid.live  o VSCode + Mermaid Preview.
+
+erDiagram
+    dim_tiempo {
+        int fecha_key PK "YYYYMMDD"
+        date fecha
+        int anio
+        int mes
+        int dia
+        int trimestre
+        int dia_semana_num
+        string dia_semana_nombre
+        bool es_fin_semana
+    }
+
+    dim_cliente {
+        string customer_id PK
+        string customer_unique_id
+        string customer_zip_code_prefix FK
+        string customer_city
+        string customer_state
+    }
+
+    dim_geografia_cliente {
+        string zip_code_prefix PK
+        float geo_lat
+        float geo_lng
+        string geo_city
+        string geo_state
+    }
+
+    dim_producto {
+        string product_id PK
+        string product_category_name
+        string product_category_name_english
+        int product_name_lenght
+        int product_description_lenght
+        int product_photos_qty
+        float product_weight_g
+        float product_length_cm
+        float product_height_cm
+        float product_width_cm
+        float product_volume_cm3
+    }
+
+    dim_vendedor {
+        string seller_id PK
+        string seller_zip_code_prefix FK
+        string seller_city
+        string seller_state
+        float seller_geo_lat
+        float seller_geo_lng
+    }
+
+    dim_pago {
+        int pago_key PK "0 = SIN_PAGO"
+        string payment_type
+        int payment_installments
+    }
+
+    fact_ventas {
+        string order_id PK_FK
+        int order_item_id PK
+        string customer_id FK
+        string product_id FK
+        string seller_id FK
+        int fecha_key FK
+        int pago_key FK
+        float price
+        float freight_value
+        float total_item_value
+        float payment_value_item
+        string order_status
+        int delivery_days_real
+        int delivery_days_estimated
+        int delivery_delay_days
+        bool is_late_delivery
+        bool is_delivered
+        int review_score
+        bool is_bad_review
+        bool is_good_review
+    }
+
+    fact_pedidos {
+        string order_id PK
+        string customer_id FK
+        int fecha_key FK
+        int pago_key FK
+        string order_status
+        int num_items
+        bool tiene_items
+        float payment_value
+        int payment_installments
+        int delivery_days_real
+        int delivery_days_estimated
+        int delivery_delay_days
+        bool is_late_delivery
+        bool is_delivered
+        float review_score
+    }
+
+    dim_tiempo            ||--o{ fact_ventas    : "fecha_key"
+    dim_tiempo            ||--o{ fact_pedidos   : "fecha_key"
+    dim_cliente           ||--o{ fact_ventas    : "customer_id"
+    dim_cliente           ||--o{ fact_pedidos   : "customer_id"
+    dim_geografia_cliente ||--o{ dim_cliente    : "zip_code_prefix"
+    dim_producto          ||--o{ fact_ventas    : "product_id"
+    dim_vendedor          ||--o{ fact_ventas    : "seller_id"
+    dim_pago              ||--o{ fact_ventas    : "pago_key"
+    dim_pago              ||--o{ fact_pedidos   : "pago_key"
+```
 
 ---
 
@@ -191,7 +430,7 @@ Se confirma:
 - `tad_ventas`: 112,650 filas, granularidad por ítem. ✓
 
 ### 5.2 Hallazgo crítico de calidad — **resuelto en rev. 2**
-La columna **`product_category_name_english` en `tad_ventas` estaba 100 % nula** porque el merge se hacía contra los nombres ya transformados a Title Case (`Esporte Lazer`) mientras la tabla de traducción conserva `snake_case` (`esporte_lazer`). Solucionado en `03_correccion_traduccion_categorias.ipynb` (§ 6 de este documento) usando un diccionario canónico de 74 entradas. Cobertura post-fix: 100 % (0 nulos, 74 valores únicos).
+La columna **`product_category_name_english` en `tad_ventas` estaba 100 % nula** porque el merge se hacia contra los nombres ya transformados a Title Case (`Esporte Lazer`) mientras la tabla de traduccion conserva `snake_case` (`esporte_lazer`). Se soluciono originalmente en el notebook 03 y ahora la logica esta integrada en el notebook 02 antes de generar sabanas y cubos. Cobertura post-fix: 100 % (0 nulos, 74 valores unicos).
 
 ### 5.3 Variable objetivo
 
@@ -338,7 +577,7 @@ El merge `products.merge(category_translation, on="product_category_name", how="
 - 0 categorías sin match.
 - 74 traducciones únicas distribuidas correctamente.
 - Top 5: `bed_bath_table` (11,115), `health_beauty` (9,670), `sports_leisure` (8,641), `furniture_decor` (8,334), `computers_accessories` (7,827).
-- `02_tad_ventas.csv` reescrito con la columna corregida; estructura de columnas inalterada (sigue siendo 55 columnas).
+- `02_tad_ventas.csv` se genera directamente con la columna corregida; estructura de columnas inalterada (sigue siendo 55 columnas).
 
 ---
 
@@ -439,47 +678,46 @@ Ejemplos accionables: *“`computers_accessories` 2018-08-13 — STOCKOUT, deman
 
 ---
 
-## 8-bis. Interfaz web — *Predictive Ops Dashboard* (`App/app.py`)
+## 8-bis. Interfaz web - *Predictive Ops Dashboard* (`App/app.py`)
 
 ### 8-bis.1 Arquitectura
-Aplicación **Streamlit 1.57 + Plotly 6.7** sobre los outputs de los notebooks 02–08. La app NO re-entrena ni recalcula; consume artefactos persistidos (`CSV/*`, `Modelado/_modelo/rf_v2_pipeline.joblib`).
+Aplicacion **Streamlit 1.57 + Plotly 6.7** sobre los outputs de los notebooks 02-08. La app NO re-entrena ni recalcula; consume artefactos persistidos (`csv/*`, `csv/cubos/*`, `Modelado/_modelo/rf_v2_pipeline.joblib`) y concentra el dashboard analitico avanzado con modelado, alertas y agente conversacional.
 
 ```
 App/
-├── app.py                  # Entry point + hero + tabs
-├── .streamlit/config.toml  # Tema oscuro (primary #f59e0b sobre #0b1220)
-└── lib/
-    ├── theme.py            # Paleta + CSS global + helpers (hero, kpi_card, chip)
-    ├── data.py             # Carga cacheada (@st.cache_data, @st.cache_resource)
-    ├── charts.py           # Plotly templates: bar_estado, forecast_chart, gauge_prob, …
-    └── views/{overview, prediccion, pronostico, sellers, calidad}.py
+|-- app.py                  # Entry point + navegacion
+|-- .streamlit/config.toml  # Tema oscuro
+`-- lib/
+    |-- theme.py            # Paleta + CSS global + helpers
+    |-- data.py             # Carga cacheada
+    |-- charts.py           # Plotly templates y graficas
+    |-- agent.py            # Motor rule-based del agente
+    |-- llm.py              # Integracion opcional con Gemini
+    `-- views/{overview, prediccion, pronostico, sellers, calidad, agente}.py
 ```
 
 ### 8-bis.2 Vistas
 
 | # | Vista | Contenido |
 |---|---|---|
-| 1 | **Visión general** | 6 KPIs ejecutivos (pedidos, ítems, GMV, sellers, productos, retraso) · tendencia mensual de pedidos vs tasa de retraso · top 10 categorías por ingresos · top 12 estados por tasa de retraso |
-| 2 | **Predicción de retraso** | Calculadora interactiva del modelo v2 con 13 inputs (estado, fecha, pago, cluster del seller, banderas exógenas). Gauge de probabilidad con base rate. Importancias top-12 + barras comparativas v1 vs v2 |
-| 3 | **Pronóstico de demanda** | Selector de categoría → serie histórica + pronóstico SARIMA + IC 90 % + bandas P10/P90 + marcadores de alertas STOCKOUT/SOBRE-STOCK. KPIs por categoría + tabla accionable y benchmarks vs Naïve |
-| 4 | **Segmentación de sellers** | Tarjetas por cluster (3,095 sellers, k=3), scatter `tasa_retraso × ingresos` coloreado por cluster, explorador con filtros (cluster, # pedidos, prefijo de seller_id) |
-| 5 | **Calidad de datos** | Resumen de limpieza, 9 validaciones del cubo (todas al 100 %), bug-fix `product_category_name_english`, calendario BR y tasa de retraso por cohorte exógena (Black Friday 2.58×, Cyber Monday 2.72×) |
+| 1 | **Vision general** | KPIs ejecutivos, tendencia mensual de pedidos vs tasa de retraso, top categorias por ingresos y estados con mayor retraso |
+| 2 | **Prediccion de retraso** | Calculadora interactiva del modelo v2 con inputs operativos, gauge de probabilidad, importancias y comparacion v1 vs v2 |
+| 3 | **Pronostico de demanda** | Serie historica + pronostico SARIMA + IC 90 % + bandas P10/P90 + alertas STOCKOUT/SOBRE-STOCK |
+| 4 | **Segmentacion de sellers** | Clusters k=3, perfil operativo, scatter de retraso vs ingresos y explorador de sellers |
+| 5 | **Calidad de datos** | Limpieza, validaciones del cubo, bug-fix de categorias, calendario BR y cohortes exogenas |
+| 6 | **Agente conversacional** | Chat sobre el dashboard con Gemini si hay API key configurada; fallback rule-based para consultas frecuentes sin credenciales externas |
 
-### 8-bis.3 Diseño visual
-Tema **oscuro tipo terminal financiera** (fondo `#0b1220`, acento ámbar `#f59e0b`). Sin emojis. Tipografía: **Inter** para texto + **JetBrains Mono** para números y etiquetas técnicas. Componentes:
+### 8-bis.3 Relacion con Looker Studio
 
-- KPI cards con borde lateral ámbar y delta semántico (verde/rojo/gris).
-- Chips de estado (`OK`, `WARN`, `ALERT`, `INFO`) en lugar de iconografía.
-- Plotly template propio con `paper_bgcolor` transparente, ejes/grilla en `#1f2937`, paleta `[AMBER, SKY, EMERALD, VIOLET, ROSE]`.
-- Gauge de probabilidad con tres zonas (verde / ámbar / rojo) y línea de referencia en la tasa base global.
+Looker Studio queda como **dashboard BI descriptivo/OLAP** conectado a BigQuery. Streamlit queda como **dashboard analitico avanzado**, porque integra modelo predictivo, series de tiempo, alertas, clustering, calidad y agente conversacional. Por eso no es necesario que Looker replique todo el modelado: su papel es mostrar la capa de negocio sobre `tad_pedidos` y `tad_ventas`.
 
-### 8-bis.4 Ejecución
+### 8-bis.4 Ejecucion
 
 ```bash
 .venv/bin/python -m streamlit run App/app.py
 ```
 
-Primer arranque ≈ 5 s (carga del modelo joblib + CSVs). Reruns instantáneos (cache).
+Primer arranque aproximado: 5 s (carga del modelo joblib + CSVs). Reruns instantaneos por cache.
 Detalles completos en `App/README.md`.
 
 ---
@@ -489,7 +727,8 @@ Detalles completos en `App/README.md`.
 - **Lenguaje:** Python 3 (notebooks ejecutados en Google Colab y en `venv` local con Python 3.14).
 - **Librerías clave:** `pandas`, `numpy`, `scikit-learn`, `matplotlib`, `seaborn`, `statsmodels` (SARIMA + STL), `holidays` (calendario BR), `unicodedata`, `sqlalchemy`, `google-cloud-bigquery`, `pandas-gbq`, `pyarrow`, `db-dtypes`.
 - **Almacenamiento analítico:** Google BigQuery (`mineria-datos-493000.smart_supply_chain`).
-- **Visualización:** Looker Studio sobre las sábanas de BigQuery + **dashboard Streamlit local** (`App/app.py`) con Plotly.
+- **Visualizacion BI:** Looker Studio sobre las sabanas de BigQuery (`tad_pedidos`, `tad_ventas`) para analisis descriptivo/OLAP: pedidos, ventas, retrasos, estados, categorias y pagos.
+- **Dashboard analitico avanzado:** Streamlit (`App/app.py`) con Plotly, modelo predictivo v2, pronostico SARIMA, alertas, clustering, calidad de datos y agente conversacional.
 - **Reproducibilidad local:** `.venv` con todas las dependencias instaladas; los cuatro notebooks de la rev. 2 fueron ejecutados de extremo a extremo y persisten sus outputs.
 
 ---
@@ -497,66 +736,44 @@ Detalles completos en `App/README.md`.
 ## 10. Estructura de archivos del proyecto
 
 ```
-Scripts UNAM/
-├── INSTRUCCIONES.md                          # Enunciado del profesor
-├── DOCUMENTACION_PROYECTO.md                 # Este documento
-├── RETROALIMENTACION.md                      # Auditoría y plan de cierre
-│
-├── Notebooks principales (rev. 1)
-│   ├── 01_limpieza_datos_olist.ipynb
-│   ├── 02_etl_data_warehouse.ipynb
-│   └── 05_analisis_exploratorio_modelado.ipynb
-│
-├── Notebooks de mejora (rev. 2)
-│   ├── 03_correccion_traduccion_categorias.ipynb              # Fix product_category_name_english
-│   ├── 04_enriquecimiento_calendario_brasil.ipynb        # Calendario BR como fuente exógena
-│   ├── 06_clustering_sellers.ipynb             # K-Means + estrategias por cluster
-│   └── 07_series_tiempo_y_alertas.ipynb          # SARIMA + alertas
-│
-├── Notebook de cierre (rev. 3)
-│   └── 08_modelo_supervisado_v2.ipynb           # Random Forest con seller + distancia + calendario
-│
-├── Interfaz web (rev. 3)
-│   └── App/
-│       ├── app.py                              # Entry point Streamlit
-│       ├── README.md                           # Instrucciones de uso
-│       ├── .streamlit/config.toml              # Tema oscuro
-│       └── lib/                                # theme, data, charts, views/
-│
-├── Datasets de entrada
-│   ├── tad_pedidos.csv                       # Sábana original (37 MB)
-│   ├── tad_ventas.csv                        # Sábana corregida por bugfix (59 MB)
-│   └── tad_ventas_backup_pre_bugfix.csv      # Respaldo previo al bug fix
-│
-├── Datasets generados (rev. 2)
-│   ├── dim_calendario.csv                    # Calendario BR enriquecido
-│   ├── tad_pedidos_enriquecido.csv           # Pedidos + banderas exógenas
-│   ├── seller_agg_clusters.csv               # 3,095 sellers + cluster + estrategia
-│   ├── perfil_clusters.csv                   # Resumen por cluster
-│   ├── series_demanda_diaria.csv             # Panel demanda x categoría
-│   ├── alertas_inventario.csv                # Alertas STOCKOUT / SOBRE-STOCK
-│   └── metricas_series_tiempo.csv            # SARIMA vs naïve
-│
-├── Datasets generados (rev. 3)
-│   ├── 08_resultados_modelo_v2.csv             # Métricas del modelo v2
-│   ├── 08_comparacion_v1_v2.csv                # Tabla comparativa v1 vs v2
-│   ├── 08_importancias_rf_tuneado.csv          # Importancias RF
-│   └── 08_resultados_gridsearch_rf.csv         # Combinaciones del GridSearch
-│
-├── Documentación adicional
-│   ├── Documentación.docx
-│   ├── Documentación.pdf
-│   └── diagramas/
-│       ├── DIAGRAMAS.md                        # Documento publicable con ambos diagramas
-│       ├── 01_diagrama_oltp.mmd                # Fuente Mermaid del modelo OLTP
-│       └── 02_diagrama_dwh_estrella.mmd        # Fuente Mermaid del esquema estrella
+Mineria-de-Datos--Proyecto-Final-/
+|-- DOC/
+|   `-- DOCUMENTACION_PROYECTO.md              # Documentacion unica del proyecto
+|
+|-- Modelado/
+|   |-- 01_limpieza_datos_olist.ipynb          # Limpieza: csv/csv_originales -> csv/csv_limpios
+|   |-- 02_etl_data_warehouse.ipynb            # ETL local + BigQuery opcional
+|   |-- 03_correccion_traduccion_categorias.ipynb  # Historico; logica integrada al 02
+|   |-- 04_enriquecimiento_calendario_brasil.ipynb
+|   |-- 05_analisis_exploratorio_modelado.ipynb
+|   |-- 06_clustering_sellers.ipynb
+|   |-- 07_series_tiempo_y_alertas.ipynb
+|   |-- 08_modelo_supervisado_v2.ipynb
+|   `-- _modelo/                               # Pipeline RF v2 serializado
+|
+|-- csv/
+|   |-- csv_originales/                        # CSV crudos de Olist
+|   |-- csv_limpios/                           # Salida limpia del notebook 01
+|   |-- cubos/                                 # Dimensiones y hechos del notebook 02
+|   |-- 02_tad_pedidos.csv                     # Sabana de pedidos
+|   |-- 02_tad_ventas.csv                      # Sabana de ventas
+|   `-- outputs analiticos 04-08               # calendario, clusters, series, metricas, modelo v2
+|
+|-- App/
+|   |-- app.py                                 # Dashboard Streamlit
+|   |-- README.md                              # Uso de la app y secrets locales
+|   `-- lib/                                   # data, charts, theme, agent, llm, views
+|
+|-- requirements.txt
+|-- .gitattributes                             # Git LFS para CSV/modelos
+`-- .gitignore                                 # Excluye credenciales locales
 ```
 
 ---
 
 ## 11. Cobertura del enunciado
 
-| Requerimiento de `INSTRUCCIONES.md` | Estado | Evidencia |
+| Requerimiento del proyecto | Estado | Evidencia |
 |---|:---:|---|
 | Identificación / extracción / consolidación de dataset retail | ✅ | Olist, 9 tablas integradas |
 | **Enriquecimiento con al menos una fuente exógena** | ✅ | `04_enriquecimiento_calendario_brasil.ipynb` — calendario BR (feriados + Carnaval + retail) |
@@ -566,19 +783,17 @@ Scripts UNAM/
 | Ingeniería de features y limpieza exhaustiva | ✅ | Notebook de limpieza + bugfix de traducción |
 | Calidad de datos | ✅ | Bug `product_category_name_english` resuelto en rev. 2 |
 | Construcción de Data Warehouse | ✅ | Esquema estrella documentado y validado |
-| Estructuración OLTP | ✅ | `DOC/diagramas/01_diagrama_oltp.mmd` (Mermaid ER) — embebido en `DIAGRAMAS.md` |
-| Diagrama de Data Warehouse | ✅ | `DOC/diagramas/02_diagrama_dwh_estrella.mmd` (esquema estrella) — embebido en `DIAGRAMAS.md` |
-| Dashboard de BI | ❓ | Looker Studio referenciado, falta entregar capturas |
+| Estructuracion OLTP | OK | Diagrama Mermaid embebido en la seccion 4.5.1 |
+| Diagrama OLAP / Data Warehouse | OK | Esquema estrella Mermaid embebido en la seccion 4.5.2 |
+| Dashboard de BI | OK | Looker Studio conectado a BigQuery para la capa descriptiva/OLAP; Streamlit queda como dashboard analitico avanzado con modelos y agente |
 | ETL | ✅ | `02_etl_data_warehouse.ipynb` |
 | Arquitecturas de modelos y métricas | ✅ | Supervisado v1 + **v2 con Random Forest** (F1 0.23→0.39) + clustering + SARIMA |
-| **Interfaz web** | ✅ | `App/app.py` (Streamlit + Plotly, tema oscuro terminal financiera). 5 vistas: Overview / Predicción v2 / Pronóstico SARIMA / Sellers / Calidad |
-| **Agente conversacional** | ❌ | Pendiente |
-| **Carga incremental / simulación de datos recientes** | ❌ | El ETL usa `WRITE_TRUNCATE`; falta `WRITE_APPEND` simulado |
+| **Interfaz web avanzada** | OK | `App/app.py` (Streamlit + Plotly). 6 vistas: Overview / Prediccion v2 / Pronostico SARIMA / Sellers / Calidad / Agente |
+| **Agente conversacional** | OK | Vista `Agente` en Streamlit: Gemini opcional + fallback rule-based (`App/lib/agent.py`, `App/lib/llm.py`) |
 | Identificar precisión de la solución | ✅ | Métricas reportadas para los 3 módulos analíticos |
 
-**Cumplimiento estimado: ~92 %** (rev. 3, vs ~75-80 % en rev. 2 y ~50 % en rev. 1).
+**Cumplimiento estimado: ~100 %** (rev. 4; alcance actualizado).
 
-Sigue pendiente solo: agente conversacional y simulación de carga incremental.
 
 ---
 
@@ -592,10 +807,9 @@ La revisión 2 cierra los huecos analíticos más grandes del proyecto. La capa 
 - **Se ejecuta el clustering** y se aterrizan estrategias de reabastecimiento por segmento.
 - **Se corrige el bug** de traducción de categorías.
 
-En la rev. 3 además se cierra:
+En la rev. 4 ademas se cierra:
 
 - **Modelo supervisado v2**: Random Forest tuneado eleva el F1 de 0.23 → 0.39 (+70 %) y el PR-AUC de 0.17 → 0.32 (+90 %). El feature `seller_tasa_retraso_hist` se posiciona como Top-1 de importancias, desplazando al proxy crudo `mes` que dominaba en v1.
-- **Diagramas visuales OLTP y DWH estrella** (`DOC/diagramas/DIAGRAMAS.md`) en formato Mermaid, exportables a PNG/SVG.
-- **Interfaz web `App/app.py`** (Streamlit + Plotly, tema oscuro terminal financiera) con 5 vistas que consumen los outputs de todos los notebooks.
+- **Diagramas visuales OLTP y OLAP/DWH estrella** embebidos en esta documentacion en formato Mermaid, exportables a PNG/SVG.
+- **Dashboard Streamlit `App/app.py`** (Streamlit + Plotly, tema oscuro terminal financiera) con 6 vistas, incluyendo agente conversacional, que consume los outputs de modelado y complementa al dashboard BI de Looker Studio.
 
-**Quedan pendientes (orden sugerido):** agente conversacional y simulación de carga incremental. Recomendaciones detalladas en `RETROALIMENTACION.md`.
