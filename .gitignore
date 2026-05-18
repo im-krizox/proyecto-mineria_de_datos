@@ -1,6 +1,13 @@
 # Secrets (nunca subir claves de API ni credenciales)
 **/secrets.toml
+.env
+.env.*
 *.pem
+*.key
+*credentials*.json
+*credential*.json
+*service-account*.json
+*service_account*.json
 smart_supply_chain.json
 
 # Python
