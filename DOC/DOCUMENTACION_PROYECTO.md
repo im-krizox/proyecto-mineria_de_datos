@@ -6,6 +6,20 @@
 
 ---
 
+## Lectura rapida del proyecto
+
+Este proyecto nace de una pregunta practica: si una empresa de e-commerce quiere mejorar su cadena de suministro, no basta con ver ventas totales; necesita entender que productos se venden, donde se concentran los clientes, que vendedores cumplen mejor, que pedidos se retrasan y que categorias pueden quedarse sin inventario. Por eso el trabajo no se limita a limpiar datos, sino que construye una ruta completa desde los CSV originales hasta herramientas de analisis y decision.
+
+Primero se parte de las tablas originales de Olist, que representan la operacion transaccional del negocio: pedidos, clientes, productos, pagos, vendedores, resenas y ubicaciones. Esa capa se puede entender como el punto de partida OLTP, es decir, los datos tal como nacen de la operacion. Antes de analizarlos, se limpian y normalizan para evitar errores de fechas, nulos, duplicados o codigos inconsistentes.
+
+Despues se construye una capa analitica OLAP. El objetivo de esta etapa es transformar los datos operativos en tablas utiles para responder preguntas de negocio. Por eso se generan dimensiones, tablas de hechos, cubos y dos sabanas principales: `tad_pedidos` y `tad_ventas`. Estas salidas permiten analizar ventas, pedidos, retrasos, pagos, categorias, clientes y vendedores sin tener que volver a unir manualmente todas las tablas originales.
+
+Con esa base se habilitan dos formas de consumo. BigQuery funciona como almacenamiento analitico en la nube y Looker Studio como dashboard BI descriptivo para explorar indicadores generales. En paralelo, Streamlit se usa como dashboard avanzado, porque ahi se integran los modelos: prediccion de retrasos, pronostico de demanda, alertas de stockout o sobre-stock, segmentacion de vendedores y un agente conversacional para consultar resultados.
+
+La logica del proyecto sigue una historia: primero ordenar los datos, despues convertirlos en una estructura analitica, luego detectar patrones y finalmente entregar herramientas visuales y predictivas que ayuden a tomar decisiones. Cada notebook cumple una parte de esa ruta y los archivos generados van conectando una etapa con la siguiente.
+
+---
+
 ## 1. Resumen ejecutivo
 
 El proyecto construye un flujo *end-to-end* sobre el dataset público **Olist (Brazilian E-Commerce)** con el objetivo de soportar decisiones de la cadena de suministro de la empresa ficticia *Nexus Supply*. La solución entregada cubre:
@@ -495,9 +509,9 @@ Se construye `seller_agg` y se hace EDA de distribuciones / atípicos. La ejecuc
 
 ---
 
-## 5-bis. Modelo supervisado v2 (`08_modelo_supervisado_v2.ipynb`)
+## 6. Modelo predictivo mejorado (`08_modelo_supervisado_v2.ipynb`)
 
-### 5-bis.1 Motivación
+### 6.1 Por que se mejoro el modelo
 El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `mes` (importancia 0.33) y `trimestre` (0.21), es decir, en *proxies crudos* de estacionalidad. La rev. 3 reentrena el modelo añadiendo señales causales reales producidas por los notebooks 04 y 06:
 
 | Bloque de features nuevas | Origen |
@@ -506,7 +520,7 @@ El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `m
 | Cluster operativo del seller + tasa histórica de retraso + review promedio | `06_seller_agg_clusters.csv` |
 | Distancia geodésica seller↔cliente (haversine) | `geo_lat/lng` + `seller_geo_lat/lng` |
 
-### 5-bis.2 Diseño metodológico
+### 6.2 Como se construyo
 - **Granularidad:** pedido (mismo que v1, para comparabilidad).
 - **Seller dominante:** el de mayor `price` dentro del pedido (cuando hay varios items de sellers distintos).
 - **Split:** estratificado 70/30, `random_state=42` (idéntico a v1).
@@ -514,7 +528,7 @@ El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `m
 - **Modelos:** Dummy, Árbol de decisión (v2 con nuevas features), Random Forest baseline (300 árboles), Random Forest tuneado por GridSearchCV (24 combinaciones × 3 folds, `scoring="f1"`).
 - **Tratamiento de fuga:** se mantienen las exclusiones del v1 (`delivery_days_real`, `delivery_delay_days`, `review_score`, etc.).
 
-### 5-bis.3 Resultados
+### 6.3 Resultados principales
 
 | Modelo | Accuracy | Precision₁ | Recall₁ | **F1₁** | ROC-AUC | PR-AUC |
 |---|---:|---:|---:|---:|---:|---:|
@@ -525,7 +539,7 @@ El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `m
 
 **Mejor configuración del GridSearch:** `max_depth=20`, `max_features="sqrt"`, `min_samples_leaf=5`, `n_estimators=400`. F1-CV = 0.374.
 
-### 5-bis.4 Comparación v1 → v2
+### 6.4 Comparacion contra el modelo anterior
 
 | Métrica | v1 (Árbol GS) | v2 (RF GS) | Δ |
 |---|---:|---:|:---:|
@@ -538,7 +552,7 @@ El modelo v1 alcanzó un techo de **F1 = 0.23** apoyándose principalmente en `m
 
 El v2 reduce a la mitad la tasa de falsos positivos respecto al v1 (de 85 % a ≈68 % por cada alerta emitida) y casi duplica el PR-AUC, métrica más adecuada al desbalance 93/7. Recall baja porque el modelo se vuelve más selectivo, pero el F1 sube 70 %.
 
-### 5-bis.5 Importancia de variables (Random Forest tuneado)
+### 6.5 Variables mas importantes
 
 | Variable | Importancia | Comentario |
 |---|---:|---|
@@ -554,7 +568,7 @@ El v2 reduce a la mitad la tasa de falsos positivos respecto al v1 (de 85 % a �
 
 **Lectura cualitativa:** el modelo deja de apoyarse en proxies y se apoya en **señales causales** (qué seller, a qué distancia, en qué contexto exógeno). Esto valida la inversión hecha en los notebooks 04 (calendario) y 06 (clustering).
 
-### 5-bis.6 Outputs
+### 6.6 Archivos generados
 - `08_resultados_modelo_v2.csv` — métricas de los 4 modelos v2.
 - `08_comparacion_v1_v2.csv` — tabla unificada v1 vs v2.
 - `08_importancias_rf_tuneado.csv` — ranking completo de importancias.
@@ -562,18 +576,18 @@ El v2 reduce a la mitad la tasa de falsos positivos respecto al v1 (de 85 % a �
 
 ---
 
-## 6. Capa 4 — Bug fix de traducción de categorías (`03_correccion_traduccion_categorias.ipynb`)
+## 7. Correccion de categorias de producto (`03_correccion_traduccion_categorias.ipynb`)
 
-### 6.1 Diagnóstico
+### 7.1 Problema detectado
 El merge `products.merge(category_translation, on="product_category_name", how="left")` del ETL original fallaba silenciosamente porque la limpieza previa había convertido las categorías a Title Case (`Esporte Lazer`) mientras el archivo de traducción conserva el formato original `snake_case` (`esporte_lazer`). El resultado: 112,650 filas con `product_category_name_english` en `NaN` (100 %).
 
-### 6.2 Solución
+### 7.2 Solucion aplicada
 1. Backup del archivo original en `_backup/tad_ventas_backup_pre_bugfix.csv`.
 2. Diccionario canónico de **74 entradas** (los 71 oficiales de Olist + `casa_conforto_2` y `eletrodomesticos_2` presentes en el dataset + `sin_categoria` añadido por el equipo en limpieza).
 3. Conversión Title Case → snake_case y mapeo directo.
 4. Asserts de calidad: número de filas, no nulos, consistencia 1:1 PT↔EN.
 
-### 6.3 Resultado
+### 7.3 Resultado
 - 0 categorías sin match.
 - 74 traducciones únicas distribuidas correctamente.
 - Top 5: `bed_bath_table` (11,115), `health_beauty` (9,670), `sports_leisure` (8,641), `furniture_decor` (8,334), `computers_accessories` (7,827).
@@ -581,9 +595,9 @@ El merge `products.merge(category_translation, on="product_category_name", how="
 
 ---
 
-## 7. Capa 5 — Segmentación de Sellers (`06_clustering_sellers.ipynb`)
+## 8. Segmentacion de vendedores (`06_clustering_sellers.ipynb`)
 
-### 7.1 Tabla agregada `seller_agg`
+### 8.1 Tabla base `seller_agg`
 3,095 filas, una por seller, con 13 variables agrupadas en cinco dimensiones:
 
 | Dimensión | Variables |
@@ -596,17 +610,17 @@ El merge `products.merge(category_translation, on="product_category_name", how="
 
 Imputación: 5 sellers sin reviews y 125 sin tiempo real de entrega → mediana (preservar la cola larga).
 
-### 7.2 Pipeline de modelado
+### 8.2 Preparacion del modelo
 - `log1p` sobre variables monetarias y de conteo (reducir sesgo).
 - `StandardScaler` (K-Means es sensible a escala).
 - K-Means `k-means++`, `n_init=10`, `random_state=42`.
 
-### 7.3 Selección de k
+### 8.3 Seleccion de grupos
 Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, Davies-Bouldin). La selección final se restringe al rango operativo 3-6 (más segmentos serían inmanejables para reabastecimiento) y se escoge la combinación con mejor ranking compuesto.
 
 **k seleccionado: 3.**
 
-### 7.4 Caracterización de los clusters
+### 8.4 Caracterizacion de grupos
 
 | Cluster | Etiqueta | n sellers | n_pedidos | Ingresos | Tasa retraso | Review | Alcance |
 |:---:|---|---:|---:|---:|---:|---:|---:|
@@ -614,7 +628,7 @@ Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, 
 | 0 | **Mediano regional** | 1,541 | 4 | $361 | 0 % | 4.55 | 2 estados |
 | 2 | **Cola larga inestable** | 496 | 2 | $236 | 0 % | **2.42** | 2 estados |
 
-### 7.5 Estrategias de reabastecimiento por cluster
+### 8.5 Estrategias de reabastecimiento por grupo
 
 | Cluster | Estrategia operativa |
 |---|---|
@@ -622,25 +636,25 @@ Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, 
 | Mediano regional | Stock conservador, cubrir su footprint regional. Reabasto mensual. Respaldo cuando los power-sellers se saturan. |
 | Cola larga inestable | Cero buffer, producción bajo pedido. Plan de mejora de calidad o salida del catálogo si retraso/mala-review no mejora en 60 días. |
 
-### 7.6 Outputs
+### 8.6 Archivos generados
 - `06_seller_agg_clusters.csv` — 3,095 sellers con etiqueta y estrategia (cargable a BigQuery como `dim_cluster_seller`).
 - `06_perfil_clusters.csv` — vista resumen para la presentación gerencial.
 
 ---
 
-## 8. Capa 6 — Series de Tiempo y Alertas (`07_series_tiempo_y_alertas.ipynb`)
+## 9. Pronostico de demanda y alertas (`07_series_tiempo_y_alertas.ipynb`)
 
-### 8.1 Diseño
+### 9.1 Enfoque
 - **Unidad muestral:** demanda diaria en items vendidos por `product_category_name_english`. (Olist no tiene tiendas físicas → categoría es la mayor granularidad estable.)
 - **Top 5 categorías** por volumen: `bed_bath_table`, `health_beauty`, `sports_leisure`, `furniture_decor`, `computers_accessories`.
 - **Ventana:** 730 días (2016-09-04 a 2018-09-03) — sólo pedidos efectivos (excluyendo `canceled`/`unavailable`).
 - **Train / Test:** 700 / 30 días (rolling-origin).
 
-### 8.2 Modelos comparados
+### 9.2 Modelos comparados
 - **Baseline:** Naïve estacional (repetir la última semana 7 días × 4).
 - **SARIMA(1,1,1)(1,1,1,7)** — captura tendencia y estacionalidad semanal de período 7. La estacionalidad anual no se modela porque el train sólo contiene ~1.9 ciclos.
 
-### 8.3 Métricas (sobre los 30 días de test)
+### 9.3 Metricas principales
 
 | Categoría | Naïve sMAPE | **SARIMA sMAPE** | Mejora |
 |---|---:|---:|:---:|
@@ -652,7 +666,7 @@ Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, 
 
 SARIMA mejora al baseline en 3 de 5 categorías y empata en las otras 2 (no degrada).
 
-### 8.4 Sistema de alertas tempranas
+### 9.4 Sistema de alertas
 Convierte el pronóstico a **señales accionables** para los planeadores de inventario:
 
 | Tipo | Regla | Acción sugerida |
@@ -671,16 +685,16 @@ Convierte el pronóstico a **señales accionables** para los planeadores de inve
 
 Ejemplos accionables: *“`computers_accessories` 2018-08-13 — STOCKOUT, demanda esperada hasta 36 items vs P90 histórico 24, reabastecer +159 % sobre el pedido base”*; *“`health_beauty` 2018-08-04 — SOBRE-STOCK, demanda baja hasta 5 items vs P10=13, considerar promoción”*.
 
-### 8.5 Outputs
+### 9.5 Archivos generados
 - `07_series_demanda_diaria.csv` — panel diario por categoría (insumo de dashboard).
 - `07_alertas_inventario.csv` — alertas accionables clasificadas por color.
 - `07_metricas_series_tiempo.csv` — comparación SARIMA vs naïve.
 
 ---
 
-## 8-bis. Interfaz web - *Predictive Ops Dashboard* (`App/app.py`)
+## 10. Dashboard avanzado con agente (`App/app.py`)
 
-### 8-bis.1 Arquitectura
+### 10.1 Como funciona
 Aplicacion **Streamlit 1.57 + Plotly 6.7** sobre los outputs de los notebooks 02-08. La app NO re-entrena ni recalcula; consume artefactos persistidos (`csv/*`, `csv/cubos/*`, `Modelado/_modelo/rf_v2_pipeline.joblib`) y concentra el dashboard analitico avanzado con modelado, alertas y agente conversacional.
 
 ```
@@ -696,7 +710,7 @@ App/
     `-- views/{overview, prediccion, pronostico, sellers, calidad, agente}.py
 ```
 
-### 8-bis.2 Vistas
+### 10.2 Vistas principales
 
 | # | Vista | Contenido |
 |---|---|---|
@@ -707,11 +721,11 @@ App/
 | 5 | **Calidad de datos** | Limpieza, validaciones del cubo, bug-fix de categorias, calendario BR y cohortes exogenas |
 | 6 | **Agente conversacional** | Chat sobre el dashboard con Gemini si hay API key configurada; fallback rule-based para consultas frecuentes sin credenciales externas |
 
-### 8-bis.3 Relacion con Looker Studio
+### 10.3 Relacion con Looker Studio
 
 Looker Studio queda como **dashboard BI descriptivo/OLAP** conectado a BigQuery. Streamlit queda como **dashboard analitico avanzado**, porque integra modelo predictivo, series de tiempo, alertas, clustering, calidad y agente conversacional. Por eso no es necesario que Looker replique todo el modelado: su papel es mostrar la capa de negocio sobre `tad_pedidos` y `tad_ventas`.
 
-### 8-bis.4 Ejecucion
+### 10.4 Ejecucion local
 
 ```bash
 .venv/bin/python -m streamlit run App/app.py
@@ -722,7 +736,7 @@ Detalles completos en `App/README.md`.
 
 ---
 
-## 9. Stack tecnológico
+## 11. Stack tecnologico
 
 - **Lenguaje:** Python 3 (notebooks ejecutados en Google Colab y en `venv` local con Python 3.14).
 - **Librerías clave:** `pandas`, `numpy`, `scikit-learn`, `matplotlib`, `seaborn`, `statsmodels` (SARIMA + STL), `holidays` (calendario BR), `unicodedata`, `sqlalchemy`, `google-cloud-bigquery`, `pandas-gbq`, `pyarrow`, `db-dtypes`.
@@ -733,7 +747,7 @@ Detalles completos en `App/README.md`.
 
 ---
 
-## 10. Estructura de archivos del proyecto
+## 12. Estructura de archivos del proyecto
 
 ```
 Mineria-de-Datos--Proyecto-Final-/
@@ -771,7 +785,7 @@ Mineria-de-Datos--Proyecto-Final-/
 
 ---
 
-## 11. Cobertura del enunciado
+## 13. Cobertura del enunciado
 
 | Requerimiento del proyecto | Estado | Evidencia |
 |---|:---:|---|
@@ -797,7 +811,7 @@ Mineria-de-Datos--Proyecto-Final-/
 
 ---
 
-## 12. Conclusión
+## 14. Conclusion
 
 La revisión 2 cierra los huecos analíticos más grandes del proyecto. La capa de datos se mantiene sólida (limpieza, ETL, DWH, validaciones); además, ahora:
 
