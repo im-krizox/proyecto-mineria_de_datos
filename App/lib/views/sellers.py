@@ -8,9 +8,9 @@ from .. import theme as T
 
 
 CLUSTER_COLORS = {
-    "Power-seller confiable": T.AMBER,
-    "Mediano regional":       T.SKY,
-    "Cola larga inestable":   T.ROSE,
+    "Vendedores grandes y confiables": T.AMBER,
+    "Vendedores medianos regionales":  T.SKY,
+    "Vendedores pequeños en riesgo":   T.ROSE,
 }
 
 
@@ -19,16 +19,27 @@ def render():
     perf = D.load_perfil_clusters()
 
     st.markdown(T.section("Tipos de vendedores en la plataforma",
-                           badge="3 grupos",
-                           meta=f"{len(clu):,} vendedores"),
+                           badge="Sección 04",
+                           meta=f"{len(clu):,} vendedores · 3 grupos"),
                  unsafe_allow_html=True)
 
     st.markdown(T.callout(
-        "Los <strong>3,095 vendedores</strong> de la plataforma se acomodan en "
-        "tres grupos naturales, según cuánto venden, qué tan caros son sus "
-        "productos, qué tan bien entregan, qué tan contentos quedan sus "
-        "clientes y a cuántos estados llegan. A cada grupo le conviene una "
-        "estrategia diferente para mantener inventario."
+        f"Los <strong>{len(clu):,} vendedores</strong> de la plataforma se "
+        "acomodan en tres grupos naturales, según cuánto venden, qué tan "
+        "caros son sus productos, qué tan bien entregan, qué tan contentos "
+        "quedan sus clientes y a cuántos estados llegan. A cada grupo le "
+        "conviene una estrategia diferente para mantener inventario."
+    ), unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "Los grupos se forman con <strong>K-Means</strong>, un algoritmo de "
+        "agrupamiento: compara a los vendedores entre sí y los junta por "
+        "<strong>parecido</strong> en su comportamiento, sin que nadie defina "
+        "las categorías de antemano. Los nombres de cada grupo y su estrategia "
+        "se asignan después, interpretando el perfil que resultó. Sirve para "
+        "tratar a cada tipo de vendedor con la política de inventario que le "
+        "corresponde.",
+        label="Cómo se obtienen estos grupos",
     ), unsafe_allow_html=True)
 
     # ---- Tarjetas por cluster ----------------------------------------
@@ -41,8 +52,8 @@ def render():
         with cols[i]:
             label = row["etiqueta"]
             color = CLUSTER_COLORS.get(label, T.AMBER)
-            kind = ("ok" if "Power" in label
-                     else "info" if "Mediano" in label else "alert")
+            kind = ("ok" if "grandes" in label
+                     else "info" if "medianos" in label else "alert")
             card = T.compact(
                 f'<div class="kpi" style="border-left:3px solid {color};">'
                 f'<div class="label">Grupo {row["cluster"] + 1} · {row["n_sellers"]:,} vendedores</div>'

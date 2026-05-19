@@ -49,6 +49,21 @@ def load_perfil_clusters() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def cluster_stats() -> pd.DataFrame:
+    """Estadísticas por cluster derivadas en vivo de `06_seller_agg_clusters.csv`.
+
+    Devuelve la media real (sobre los sellers de cada grupo) de la tasa de
+    retraso y la calificación. La calculadora de retraso las usa como features
+    `seller_tasa_retraso_hist` y `seller_review_promedio`; calcularlas aquí
+    evita constantes hardcodeadas que se desincronizan si cambia el clustering.
+    """
+    clu = load_clusters()
+    return (clu.groupby(["cluster", "etiqueta"], as_index=False)
+               .agg(tasa_retraso=("tasa_retraso", "mean"),
+                    review_promedio=("review_promedio", "mean")))
+
+
+@st.cache_data(show_spinner=False)
 def load_series_diaria() -> pd.DataFrame:
     df = pd.read_csv(CSV_DIR / "07_series_demanda_diaria.csv",
                      parse_dates=["fecha"])

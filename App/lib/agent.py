@@ -73,9 +73,11 @@ CATEGORIA_SINONIMOS: dict[str, list[str]] = {
 }
 
 CLUSTER_SINONIMOS: dict[str, list[str]] = {
-    "Power-seller confiable": ["power", "confiable", "top", "estrella", "mejor", "premium"],
-    "Mediano regional":       ["mediano", "medio", "regional"],
-    "Cola larga inestable":   ["cola larga", "inestable", "long tail", "pequeno", "chico", "peor"],
+    "Vendedores grandes y confiables": ["grande", "power", "confiable", "top",
+                                         "estrella", "mejor", "premium"],
+    "Vendedores medianos regionales":  ["mediano", "medio", "regional"],
+    "Vendedores pequeños en riesgo":   ["pequeno", "chico", "riesgo", "cola larga",
+                                         "inestable", "long tail", "peor"],
 }
 
 
@@ -568,8 +570,8 @@ def handle_tipos_vendedores(_text: str) -> AgentResponse:
         intent="tipos_vendedores",
         text=text,
         followups=[
-            "¿Qué hago con los power-sellers?",
-            "¿Qué hago con los vendedores cola larga?",
+            "¿Qué hago con los vendedores grandes y confiables?",
+            "¿Qué hago con los vendedores pequeños en riesgo?",
             "¿Cuáles son los peores vendedores?",
         ],
     )
@@ -581,7 +583,8 @@ def handle_recomendacion_cluster(text: str) -> AgentResponse:
     if label is None:
         return handle_tipos_vendedores(text)
     row = perf[perf["etiqueta"] == label].iloc[0]
-    chip_kind = "ok" if "Power" in label else "info" if "Mediano" in label else "alert"
+    chip_kind = ("ok" if "grandes" in label
+                 else "info" if "medianos" in label else "alert")
     text_out = (
         f"**{label}** — {fmt_int(row['n_sellers'])} vendedores en este grupo.\n\n"
         f"- Pedidos en promedio: **{row['n_pedidos']:.0f}**\n"

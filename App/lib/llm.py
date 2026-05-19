@@ -31,7 +31,7 @@ from . import agent as A
 from . import data as D
 
 
-DEFAULT_MODEL = "gemini-3-flash-lite"
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +379,8 @@ def _system_prompt() -> str:
         "sports_leisure, furniture_decor o computers_accessories (son las "
         "únicas con pronóstico).\n"
         "- Si eliges `recomendacion_cluster`, pon en `viz_hint` uno de: "
-        "'Power-seller confiable', 'Mediano regional' o 'Cola larga inestable'.\n"
+        "'Vendedores grandes y confiables', 'Vendedores medianos regionales' "
+        "o 'Vendedores pequeños en riesgo'.\n"
         "- En cualquier otro caso `viz_hint` puede ser null.\n"
         "\n"
         "# Formato de salida\n"
@@ -390,7 +391,7 @@ def _system_prompt() -> str:
         'con guiones y saltos de línea. Sé concreto: 2 a 5 párrafos cortos o '
         'una lista. Cita las cifras del snapshot textualmente.",\n'
         '  "viz": "<id_de_la_lista> o null",\n'
-        '  "viz_hint": "<entidad ej. SP, bed_bath_table, Power-seller confiable> '
+        '  "viz_hint": "<entidad ej. SP, bed_bath_table, Vendedores pequeños en riesgo> '
         'o null"\n'
         "}\n"
         "\n"

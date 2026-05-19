@@ -43,9 +43,18 @@ def render():
     st.markdown(T.callout(
         "El número más importante para el negocio es el "
         "<strong>porcentaje de entregas que llegan tarde</strong>: hoy es "
-        "6.57% de todos los pedidos. En las siguientes pestañas verás dónde "
-        "ocurren los retrasos, qué vendedores son los más críticos y qué se "
-        "espera vender en las próximas dos semanas."
+        f"{k['tasa_retraso']*100:.2f}% de todos los pedidos. En las siguientes "
+        "secciones verás dónde ocurren los retrasos, qué vendedores son los "
+        "más críticos y qué se espera vender en las próximas dos semanas."
+    ), unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "Esta sección es un <strong>resumen directo</strong> de la operación: "
+        "cuenta pedidos, suma ventas y calcula promedios y porcentajes sobre "
+        "los datos reales del negocio. No usa modelos ni estimaciones; "
+        "describe lo que ya ocurrió y sirve como punto de partida para las "
+        "demás secciones.",
+        label="Cómo se obtiene esta sección",
     ), unsafe_allow_html=True)
 
     # ---- Tendencia mensual -------------------------------------------

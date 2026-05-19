@@ -10,6 +10,43 @@ from .. import data as D
 from .. import theme as T
 
 
+# Nombres legibles para los factores del modelo (columnas técnicas -> negocio).
+FEATURE_LABELS = {
+    "seller_tasa_retraso_hist": "Historial de retraso del vendedor",
+    "delivery_days_estimated":  "Días prometidos de entrega",
+    "mes":                      "Mes del año",
+    "distancia_km":             "Distancia vendedor – cliente",
+    "seller_review_promedio":   "Calificación del vendedor",
+    "dias_a_proximo_evento":    "Días para la próxima fecha especial",
+    "payment_value":            "Monto del pago",
+    "dia":                      "Día del mes",
+    "trimestre":                "Trimestre del año",
+    "dia_semana_num":           "Día de la semana",
+    "payment_installments":     "Número de mensualidades",
+    "anio":                     "Año de la compra",
+    "num_items":                "Cantidad de productos del pedido",
+    "seller_cluster":           "Tipo de vendedor",
+    "es_fin_semana":            "Compra en fin de semana",
+    "es_evento_retail":         "Compra en día de oferta",
+    "es_feriado_nacional":      "Compra en feriado",
+    "es_carnaval":              "Compra en Carnaval",
+    "en_ventana_pre_evento_7d": "Semana previa a una fecha especial",
+}
+
+
+def _pretty_feature(name: str) -> str:
+    """Convierte el nombre técnico de una variable a lenguaje de negocio."""
+    if name in FEATURE_LABELS:
+        return FEATURE_LABELS[name]
+    if name.startswith("customer_state_"):
+        return f"Estado del cliente: {name.split('_')[-1]}"
+    if name.startswith("geo_state_"):
+        return f"Estado de entrega: {name.split('_')[-1]}"
+    if name.startswith("payment_type_"):
+        return f"Pago con {name.split('_')[-1]}"
+    return name.replace("_", " ").capitalize()
+
+
 def _build_row(schema, form: dict) -> pd.DataFrame:
     """Convierte un dict de inputs en una fila compatible con el pipeline."""
     base = {c: 0 for c in schema["num_features"]}
@@ -27,26 +64,53 @@ def render():
     coords_sel = D.coords_seller_por_estado()
     perfil = D.load_perfil_clusters()
 
+    # ---- Encabezado + cómo funciona el modelo ------------------------
+    st.markdown(T.section("Riesgo de entregas tardías",
+                           badge="Sección 02",
+                           meta="modelo predictivo entrenado con pedidos reales"),
+                 unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "Esta sección usa un modelo de <strong>Random Forest</strong> "
+        "(bosque aleatorio): combina cientos de árboles de decisión que, para "
+        "cada pedido, <strong>votan</strong> si llegará tarde o no; la "
+        "proporción de votos es la probabilidad de retraso que verás abajo. "
+        "El modelo aprendió de unos <strong>69 000 pedidos históricos</strong> "
+        "y se evaluó con otros <strong>30 000 que nunca había visto</strong>, "
+        "para confirmar que funciona con pedidos nuevos. Sirve para anticipar "
+        "qué envíos conviene vigilar antes de que se retrasen.",
+        label="Cómo funciona esta sección",
+    ), unsafe_allow_html=True)
+
     # ---- Bandeja superior con métricas del modelo --------------------
+    m = metrics
     st.markdown(T.kpi_grid(
-        T.kpi_card("Calidad general del modelo",  f'{metrics["f1_1"]:.3f}',
-                    delta=f'Versión anterior: 0.230 → +{(metrics["f1_1"]-0.23)/0.23*100:.0f}%',
-                    delta_dir="up"),
-        T.kpi_card("Aciertos cuando avisa retraso", f'{metrics["precision_1"]:.3f}',
-                    delta="antes: 0.150", delta_dir="up"),
-        T.kpi_card("Retrasos que sí detecta", f'{metrics["recall_1"]:.3f}',
-                    delta="antes: 0.600", delta_dir="down"),
-        T.kpi_card("Capacidad de distinguir riesgo", f'{metrics["roc_auc"]:.3f}',
-                    delta="antes: 0.720", delta_dir="up"),
-        T.kpi_card("Precisión en casos difíciles", f'{metrics["pr_auc"]:.3f}',
-                    delta="antes: 0.170", delta_dir="up"),
+        T.kpi_card("Retrasos que el modelo detecta",
+                    f'{m["recall_1"]*100:.0f}', unit="de cada 100",
+                    hint="De cada 100 pedidos que de verdad llegan tarde, el "
+                         "modelo logra identificar esta cantidad."),
+        T.kpi_card("Aciertos al avisar un retraso",
+                    f'{m["precision_1"]*100:.0f}', unit="de cada 100",
+                    hint="De cada 100 veces que el modelo marca un pedido como "
+                         "riesgoso, acierta en esta cantidad."),
+        T.kpi_card("Calidad general del modelo",
+                    f'{m["f1_1"]:.2f}', unit="de 1.0",
+                    delta="versión anterior: 0.23", delta_dir="up",
+                    hint="Puntaje de 0 a 1 que equilibra cuántos retrasos "
+                         "detecta y cuántas veces acierta. Más alto es mejor."),
+        T.kpi_card("Capacidad de distinguir riesgo",
+                    f'{m["roc_auc"]:.2f}', unit="de 1.0",
+                    delta="versión anterior: 0.72", delta_dir="up",
+                    hint="De 0.5 (equivale a adivinar) a 1.0 (perfecto): qué "
+                         "tan bien separa los pedidos riesgosos de los seguros."),
     ), unsafe_allow_html=True)
 
     st.markdown(T.callout(
-        "<strong>Calculadora de riesgo de retraso</strong> — simula un pedido "
-        "y el sistema estima qué tan probable es que llegue tarde. "
+        "<strong>Calculadora de riesgo de retraso</strong> — define abajo un "
+        "pedido y el sistema estima qué tan probable es que llegue tarde. "
         "La línea gris del medidor marca el promedio del negocio "
-        "({:.2%}); arriba de esa línea, el pedido es más riesgoso que lo normal.".format(base_rate)
+        "({:.1%} de los pedidos llega tarde); por encima de esa línea, el "
+        "pedido es más riesgoso que lo normal.".format(base_rate)
     ), unsafe_allow_html=True)
 
     # ---- Formulario y resultado --------------------------------------
@@ -78,8 +142,9 @@ def render():
             )
             seller_cluster_label = st.selectbox(
                 "Tipo de vendedor",
-                options=["Power-seller confiable", "Mediano regional",
-                         "Cola larga inestable"],
+                options=["Vendedores grandes y confiables",
+                         "Vendedores medianos regionales",
+                         "Vendedores pequeños en riesgo"],
             )
         with c2:
             fecha = st.date_input("Fecha de compra",
@@ -111,14 +176,15 @@ def render():
     distancia_km = D.haversine_km(cli["geo_lat"], cli["geo_lng"],
                                     sel["seller_geo_lat"], sel["seller_geo_lng"])
 
-    cluster_num_map = {"Power-seller confiable": 1, "Mediano regional": 0,
-                        "Cola larga inestable": 2}
-    cluster_retraso_map = {"Power-seller confiable": 0.0669,
-                            "Mediano regional": 0.0381,
-                            "Cola larga inestable": 0.1699}
-    cluster_review_map = {"Power-seller confiable": 4.09,
-                           "Mediano regional": 4.55,
-                           "Cola larga inestable": 2.42}
+    # Estadísticas por cluster derivadas en vivo de 06_seller_agg_clusters.csv
+    # (media real sobre los sellers de cada grupo); sin constantes hardcodeadas.
+    cstats = D.cluster_stats().set_index("etiqueta")
+    cluster_num_map = {lbl: int(cstats.loc[lbl, "cluster"])
+                       for lbl in cstats.index}
+    cluster_retraso_map = {lbl: float(cstats.loc[lbl, "tasa_retraso"])
+                           for lbl in cstats.index}
+    cluster_review_map = {lbl: float(cstats.loc[lbl, "review_promedio"])
+                          for lbl in cstats.index}
 
     es_fin = fecha.weekday() >= 5
 
@@ -181,11 +247,20 @@ def render():
         st.markdown(block, unsafe_allow_html=True)
 
     # ---- Importancias --------------------------------------------------
-    st.markdown(T.section("Qué factores influyen más en el retraso",
+    st.markdown(T.section("Qué factores pesan más al predecir un retraso",
                            badge="Explicación",
-                           meta="los 12 más importantes"),
+                           meta="los 12 factores más influyentes"),
                  unsafe_allow_html=True)
-    st.plotly_chart(C.bar_importancias(D.load_importancias(), top=12),
+    st.markdown(T.method_note(
+        "El modelo no decide al azar: aprende qué información ayuda a "
+        "anticipar un retraso. La barra muestra cuánto pesa cada factor en "
+        "esa decisión; entre más larga, más influye. El historial del "
+        "vendedor suele ser el factor más determinante.",
+        label="Cómo leer esta gráfica",
+    ), unsafe_allow_html=True)
+    imp = D.load_importancias().copy()
+    imp["feature"] = imp["feature"].map(_pretty_feature)
+    st.plotly_chart(C.bar_importancias(imp, top=12),
                      use_container_width=True, theme=None)
 
     # ---- Comparación v1 vs v2 ------------------------------------------
@@ -193,6 +268,14 @@ def render():
                            badge="Comparativa",
                            meta="probado con datos nuevos"),
                  unsafe_allow_html=True)
+    st.markdown(T.method_note(
+        "El modelo se construyó en dos etapas. La versión 1 fue un primer "
+        "intento más simple; la versión 2 (la que está en uso) añadió el "
+        "historial del vendedor, la distancia y el calendario, y casi duplicó "
+        "su calidad general. La gráfica compara ambas con datos que no se "
+        "usaron para entrenar.",
+        label="Por qué hay dos versiones",
+    ), unsafe_allow_html=True)
     cmp = D.load_comparacion_v1v2()
     keep = ["Árbol decisión (v1)", "Árbol GridSearch (v1)",
             "Random Forest (baseline)", "Random Forest (GridSearchCV)"]

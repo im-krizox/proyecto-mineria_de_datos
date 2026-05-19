@@ -1,7 +1,8 @@
 """Smart Supply Chain — Streamlit dashboard.
 
-Entry point. Inyecta el tema visual, arma el hero y delega cada vista a su
-módulo en `lib/views/`.
+Entry point. Arma la navegación lateral (Inicio / Tablero), el conmutador de
+tema (oscuro / claro) e inyecta el CSS del tema antes de delegar cada vista a
+su módulo en `lib/views/`.
 
 Ejecutar con:
     streamlit run App/app.py
@@ -21,53 +22,64 @@ sys.path.insert(0, str(ROOT))
 
 from lib import theme as T  # noqa: E402
 from lib.views import (   # noqa: E402
-    overview, prediccion, pronostico, sellers, calidad, agente,
+    inicio, overview, prediccion, pronostico, sellers, calidad, agente,
 )
 
 
 # ---- Page config -----------------------------------------------------------
 st.set_page_config(
-    page_title="Smart Supply Chain · Predictive Ops",
+    page_title="Smart Supply Chain · Nexus Supply",
     page_icon=None,
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
     menu_items={
         "About": "Smart Supply Chain — UNAM Minería de Datos 2026",
     },
 )
-st.markdown(T.CSS, unsafe_allow_html=True)
 
 
-# ---- Hero ------------------------------------------------------------------
-st.markdown(T.hero(
-    eyebrow="Smart Supply Chain · Nexus Supply · 2016 – 2018",
-    title="Tablero de Operaciones Inteligente",
-    subtitle=("Una vista clara y completa del negocio: cómo se comportan las "
-              "ventas, dónde ocurren los retrasos en las entregas, qué se "
-              "espera vender en las próximas dos semanas y qué tipo de "
-              "vendedores tenemos. Todo en un mismo lugar, fácil de leer."),
-), unsafe_allow_html=True)
+# ---- Sidebar: navegación + tema --------------------------------------------
+with st.sidebar:
+    st.markdown(
+        '<div class="side-brand">Nexus Supply · 2016 – 2018</div>'
+        '<div class="side-title">Smart Supply Chain</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="side-cap">Navegación</div>', unsafe_allow_html=True)
+    page = st.radio(
+        "Sección", ["Inicio", "Tablero de análisis"],
+        label_visibility="collapsed",
+    )
+    st.markdown('<div class="side-cap">Apariencia</div>', unsafe_allow_html=True)
+    modo_claro = st.toggle("Modo claro", value=False, key="modo_claro")
 
 
-# ---- Tabs ------------------------------------------------------------------
-tabs = st.tabs([
-    "Resumen del negocio",
-    "Riesgo de retraso",
-    "Pronóstico de ventas",
-    "Tipos de vendedores",
-    "Preparación de datos",
-    "Asistente",
-])
+# ---- Tema activo (oscuro por defecto) --------------------------------------
+T.apply("light" if modo_claro else "dark")
+st.markdown(T.css(), unsafe_allow_html=True)
 
-with tabs[0]:
-    overview.render()
-with tabs[1]:
-    prediccion.render()
-with tabs[2]:
-    pronostico.render()
-with tabs[3]:
-    sellers.render()
-with tabs[4]:
-    calidad.render()
-with tabs[5]:
-    agente.render()
+
+# ---- Páginas ---------------------------------------------------------------
+if page == "Inicio":
+    inicio.render()
+else:
+    tabs = st.tabs([
+        "Resumen del negocio",
+        "Riesgo de retraso",
+        "Pronóstico de ventas",
+        "Tipos de vendedores",
+        "Preparación de datos",
+        "Asistente",
+    ])
+    with tabs[0]:
+        overview.render()
+    with tabs[1]:
+        prediccion.render()
+    with tabs[2]:
+        pronostico.render()
+    with tabs[3]:
+        sellers.render()
+    with tabs[4]:
+        calidad.render()
+    with tabs[5]:
+        agente.render()

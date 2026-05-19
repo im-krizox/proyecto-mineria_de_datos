@@ -11,7 +11,7 @@ def render():
     ven = D.load_ventas_min()
 
     st.markdown(T.section("Cómo limpiamos y preparamos la información",
-                           badge="Calidad",
+                           badge="Sección 05",
                            meta="resumen del proceso"),
                  unsafe_allow_html=True)
 
@@ -20,6 +20,15 @@ def render():
         "confiables. Aquí mostramos qué limpiamos, qué errores encontramos y "
         "cómo agregamos información extra (como feriados y días de oferta) "
         "para que los análisis sean más certeros."
+    ), unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "Esta sección documenta el <strong>proceso ETL</strong> (extraer, "
+        "transformar y cargar): los datos originales se reunieron, se "
+        "corrigieron errores y duplicados, y se verificó que todas las cifras "
+        "cuadren entre sí. Es el cimiento de todo el tablero: sin datos "
+        "limpios, ningún modelo ni gráfica sería confiable.",
+        label="Cómo se obtiene esta sección",
     ), unsafe_allow_html=True)
 
     # ---- Resumen de limpieza ------------------------------------------

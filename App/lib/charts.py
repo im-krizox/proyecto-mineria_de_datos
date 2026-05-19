@@ -209,15 +209,16 @@ def scatter_sellers(df: pd.DataFrame, color_palette: list[str]) -> go.Figure:
 # --- Importancias -----------------------------------------------------------
 def bar_importancias(df: pd.DataFrame, top: int = 12) -> go.Figure:
     d = df.head(top).copy().iloc[::-1]
+    d["pct"] = d["importancia"] * 100
     fig = go.Figure(go.Bar(
-        x=d["importancia"], y=d["feature"], orientation="h",
+        x=d["pct"], y=d["feature"], orientation="h",
         marker=dict(color=T.AMBER, line=dict(width=0)),
-        text=[f"{v:.3f}" for v in d["importancia"]],
+        text=[f"{v:.0f}%" for v in d["pct"]],
         textposition="outside",
         textfont=dict(family="JetBrains Mono", color=T.TEXT_DIM, size=11),
-        hovertemplate="<b>%{y}</b><br>Peso: %{x:.4f}<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>Influencia: %{x:.1f}%<extra></extra>",
     ))
-    fig.update_xaxes(title="Peso del factor en la predicción")
+    fig.update_xaxes(title="Influencia del factor en la predicción", ticksuffix="%")
     fig.update_yaxes(title="")
     return _apply(fig, height=max(280, 26 * len(d)))
 

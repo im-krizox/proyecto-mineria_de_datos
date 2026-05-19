@@ -18,9 +18,21 @@ def render():
 
     # ---- Selector de categoría ----------------------------------------
     st.markdown(T.section("Pronóstico de ventas y avisos tempranos",
-                           badge="Próximos días",
+                           badge="Sección 03",
                            meta="14 días hacia adelante · 5 categorías principales"),
                  unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "El pronóstico usa un modelo <strong>SARIMA</strong> de series de "
+        "tiempo: analiza la venta diaria de cada categoría y aprende su "
+        "tendencia y sus <strong>ciclos semanales</strong> (por ejemplo, que "
+        "ciertos días se vende más) para proyectar los próximos días. Sobre "
+        "esa proyección, el sistema marca avisos de "
+        "<strong>posible faltante</strong> o de <strong>exceso de "
+        "inventario</strong>, comparando lo esperado con el rango histórico "
+        "normal de la categoría.",
+        label="Cómo funciona esta sección",
+    ), unsafe_allow_html=True)
 
     c1, c2 = st.columns([1, 3])
     with c1:

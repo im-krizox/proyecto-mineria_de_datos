@@ -1,9 +1,11 @@
 [theme]
+# Paleta nativa de Streamlit (tablas, inputs, checkboxes, sliders, menús).
+# Coincide con el modo oscuro de lib/theme.py — gris casi negro.
 base = "dark"
-primaryColor = "#f59e0b"
-backgroundColor = "#0b1220"
-secondaryBackgroundColor = "#111827"
-textColor = "#e5e7eb"
+primaryColor = "#f5a623"
+backgroundColor = "#0d0d0f"
+secondaryBackgroundColor = "#161619"
+textColor = "#ededf0"
 font = "sans serif"
 
 [server]

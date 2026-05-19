@@ -18,7 +18,9 @@ from .. import theme as T
 #  CSS local de la vista
 # ---------------------------------------------------------------------------
 
-_CHAT_CSS = f"""
+def _chat_css() -> str:
+    """Hoja de estilo del chat, construida con los tokens del tema activo."""
+    return f"""
 <style>
 .chat-bubble {{
     background: {T.BG_CARD};
@@ -31,8 +33,8 @@ _CHAT_CSS = f"""
     line-height: 1.6;
 }}
 .chat-bubble.user {{
-    background: rgba(245,158,11,0.08);
-    border-color: rgba(245,158,11,0.35);
+    background: rgba(245,166,35,0.08);
+    border-color: rgba(245,166,35,0.35);
     border-left: 3px solid {T.AMBER};
 }}
 .chat-bubble.assistant {{
@@ -62,13 +64,13 @@ _CHAT_CSS = f"""
 }}
 .fuente-tag.llm {{
     color: {T.SKY};
-    border-color: rgba(56,189,248,0.45);
-    background: rgba(56,189,248,0.08);
+    border-color: rgba(84,182,240,0.45);
+    background: rgba(84,182,240,0.08);
 }}
 .fuente-tag.rules {{
     color: {T.AMBER};
-    border-color: rgba(245,158,11,0.45);
-    background: rgba(245,158,11,0.06);
+    border-color: rgba(245,166,35,0.45);
+    background: rgba(245,166,35,0.06);
 }}
 .fuente-tag.error {{
     color: #f87171;
@@ -96,7 +98,7 @@ _CHAT_CSS = f"""
 .suggestion-grid .stButton > button:hover {{
     border-color: {T.AMBER} !important;
     color: {T.TEXT} !important;
-    background: rgba(245,158,11,0.06) !important;
+    background: rgba(245,166,35,0.06) !important;
 }}
 </style>
 """
@@ -211,7 +213,7 @@ def _handle_query(query: str, *, use_llm: bool) -> None:
 
 
 def render():
-    st.markdown(_CHAT_CSS, unsafe_allow_html=True)
+    st.markdown(_chat_css(), unsafe_allow_html=True)
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -247,6 +249,17 @@ def render():
             "Si no sabes por dónde empezar, usa las sugerencias de abajo."
         )
     st.markdown(T.callout(callout), unsafe_allow_html=True)
+
+    st.markdown(T.method_note(
+        "El asistente combina dos métodos. Las preguntas escritas se responden "
+        "con un <strong>modelo de lenguaje</strong> (Gemini), al que se le "
+        "entrega un resumen con las cifras del tablero como única fuente: "
+        "tiene instruido no inventar datos. Los botones usan un "
+        "<strong>motor de reglas</strong> determinista, que da siempre la "
+        "misma respuesta exacta. Si el modelo de lenguaje no está disponible, "
+        "todo cae automáticamente al motor de reglas.",
+        label="Cómo funciona el asistente",
+    ), unsafe_allow_html=True)
 
     # ---- Diagnóstico de Gemini --------------------------------------
     last_err = st.session_state.get("_llm_last_error")

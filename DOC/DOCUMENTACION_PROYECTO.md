@@ -154,7 +154,7 @@ El notebook está organizado por sub-notebooks lógicos, uno por tabla. Resumen 
 | `dim_geografia_cliente` | Dimensión | 14,994 | 5 | `zip_code_prefix` |
 | `dim_producto` | Dimensión | 32,951 | 11 | `product_id` |
 | `dim_vendedor` | Dimensión | 3,095 | 8 | `seller_id` |
-| `dim_pago` | Dimensión | 28 | 3 | `pago_key` (sintética) |
+| `dim_pago` | Dimensión | 29 | 3 | `pago_key` (sintética) |
 | `fact_ventas` | Hechos | 112,650 | 21 | `order_id`+`order_item_id` |
 | `fact_pedidos` | Hechos | 99,441 | 17 | `order_id` |
 | `tad_ventas` | Sábana | 112,650 | 55 | `order_id`+`order_item_id` |
@@ -624,17 +624,19 @@ Se prueba k ∈ {2, …, 10} y se evalúa con tres métricas (codo, silhouette, 
 
 | Cluster | Etiqueta | n sellers | n_pedidos | Ingresos | Tasa retraso | Review | Alcance |
 |:---:|---|---:|---:|---:|---:|---:|---:|
-| 1 | **Power-seller confiable** | 1,058 | 38 | $5,129 | 5 % | 4.09 | 10 estados |
-| 0 | **Mediano regional** | 1,541 | 4 | $361 | 0 % | 4.55 | 2 estados |
-| 2 | **Cola larga inestable** | 496 | 2 | $236 | 0 % | **2.42** | 2 estados |
+| 1 | **Vendedores grandes y confiables** | 1,058 | 38 | $5,129 | 6.6 % | 4.09 | 10 estados |
+| 0 | **Vendedores medianos regionales** | 1,541 | 4 | $361 | 2.8 % | 4.55 | 2 estados |
+| 2 | **Vendedores pequeños en riesgo** | 496 | 2 | $236 | **16.2 %** | **2.42** | 2 estados |
+
+> Las etiquetas se asignan interpretando el perfil de cada cluster de K-Means (originalmente *Power-seller confiable*, *Mediano regional* y *Cola larga inestable*; renombradas a lenguaje de negocio). Las columnas de volumen, ticket, review y alcance son **medianas** del cluster (seller típico). La **tasa de retraso se reporta como media**: la mediana colapsa a 0 % en clusters con cola larga y ocultaba el riesgo real del segmento "Vendedores pequeños en riesgo" (media 16.2 % frente a mediana 0 %).
 
 ### 8.5 Estrategias de reabastecimiento por grupo
 
 | Cluster | Estrategia operativa |
 |---|---|
-| Power-seller confiable | Buffer alto (+30 % sobre demanda esperada). Reabasto semanal automático. Priorizar pre-Black-Friday. |
-| Mediano regional | Stock conservador, cubrir su footprint regional. Reabasto mensual. Respaldo cuando los power-sellers se saturan. |
-| Cola larga inestable | Cero buffer, producción bajo pedido. Plan de mejora de calidad o salida del catálogo si retraso/mala-review no mejora en 60 días. |
+| Vendedores grandes y confiables | Buffer alto (+30 % sobre demanda esperada). Reabasto semanal automático. Priorizar pre-Black-Friday. |
+| Vendedores medianos regionales | Stock conservador, cubrir su footprint regional. Reabasto mensual. Respaldo cuando los vendedores grandes se saturan. |
+| Vendedores pequeños en riesgo | Cero buffer, producción bajo pedido. Plan de mejora de calidad o salida del catálogo si retraso/mala-review no mejora en 60 días. |
 
 ### 8.6 Archivos generados
 - `06_seller_agg_clusters.csv` — 3,095 sellers con etiqueta y estrategia (cargable a BigQuery como `dim_cluster_seller`).
